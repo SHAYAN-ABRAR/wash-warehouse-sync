@@ -1,0 +1,184 @@
+{
+  "version": 3,
+  "description": "Header-based source profiles shared by the Python engine and the browser preview. Columns are resolved by header text (case, spacing and punctuation insensitive), never by position.",
+  "personal_data_columns": [
+    "Caretaker Name", "Owner/Caretaker Name", "Mobile Number", "Father/Husband Name", "Fathers Name",
+    "Father's Name", "Created By", "Created by", "Supervisor", "Name of Driller", "Sampled By",
+    "Sample Checked By", "Geophysical Logging Conducted By", "NID", "National ID", "Phone"
+  ],
+  "sources": {
+    "AQUAWATCH": {
+      "label": "AquaWatch groundwater monitoring",
+      "formats": {
+        "aquawatch_survey": {
+          "label": "AquaWatch annual / seasonal survey export",
+          "required": ["survey_year", "resource_id"],
+          "fields": {
+            "serial": ["SL", "SL No", "Serial"],
+            "survey_year": ["Survey Year", "Survey_Year", "Year of Survey", "Survey Period"],
+            "resource_id": ["Ground Water Resource", "Ground Water Resource ID", "Groundwater Resource", "GWR ID", "Resource ID", "GWC ID"],
+            "latitude": ["Latitude", "Lat", "GPS Latitude"],
+            "longitude": ["Longitude", "Long", "Lon", "GPS Longitude"],
+            "well_type": ["Type of Tubewell", "Tubewell Type", "Type of Tube well", "Well Type"],
+            "depth": ["Depth of Tubewell", "Tubewell Depth", "Depth of Tube well", "Well Depth"],
+            "division": ["Division"],
+            "district": ["District"],
+            "upazila": ["Upazila", "Upazilla", "Thana"],
+            "union": ["Union", "Union Name", "Union/Pouroshova"],
+            "water_table": ["Water Table (m)", "Water Table", "Water Table m", "Water Level (m)"],
+            "arsenic": ["Arsenic (As)", "Arsenic", "As"],
+            "iron": ["Iron (Fe)", "Iron", "Fe"],
+            "chloride": ["Chloride (Cl)", "Chloride", "Cl"]
+          }
+        },
+        "aquawatch_historical": {
+          "label": "AquaWatch historical GWC table (1986–2017, one column per year)",
+          "required": ["gwc_id", "well_type"],
+          "year_columns_regex": "^(19|20)\\d{2}$",
+          "min_year_columns": 3,
+          "fields": {
+            "gwc_id": ["SL", "GWC", "GWC ID", "Station"],
+            "division": ["Division"],
+            "district": ["District"],
+            "upazila": ["Upazila", "Upazilla"],
+            "union": ["Union"],
+            "longitude": ["Long", "Longitude", "Lon"],
+            "latitude": ["Lat", "Latitude"],
+            "well_type": ["Well type", "Well Type", "Type"],
+            "depth_ft": ["Well Depth, (ft)", "Well Depth (ft)", "Depth (ft)"],
+            "depth_m": ["Well Depth, (m)", "Well Depth (m)", "Depth (m)"]
+          }
+        }
+      }
+    },
+    "GPANI": {
+      "label": "Grameen Pani (GPANI) tubewell registry",
+      "formats": {
+        "gpani_tubewell_report": {
+          "label": "GPANI TubewellReport export",
+          "required": ["geocode", "division"],
+          "signature": ["Water Quality Of Arsenic(As)", "W/P Type", "Water Point Depth"],
+          "fields": {
+            "serial": ["sl", "SL No"],
+            "geocode": ["geo code", "GEO Code", "Geocode", "Geo-code"],
+            "division": ["Division"],
+            "district": ["District"],
+            "upazila": ["Upazila"],
+            "union": ["Union"],
+            "village": ["Village"],
+            "latitude": ["Latitude", "Lattitude"],
+            "longitude": ["Longitude", "Longtitute", "Longitute"],
+            "depth": ["Water Point Depth", "Tubewell Depth", "Depth"],
+            "iron": ["Water Quality Of Iron(Fe)", "Iron (Fe)", "Iron"],
+            "arsenic": ["Water Quality Of Arsenic(As)", "Arsenic (As)", "Arsenic"],
+            "chloride": ["Water Quality Of Chloride(CL-)", "Chloride (Cl)", "Chloride"],
+            "manganese": ["Water Quality Of Manganese(Mn)", "Manganese (Mn)", "Manganese"],
+            "facility_type": ["W/P Type", "Water Point Type", "Type"],
+            "installation_date": ["Installation Date"],
+            "tender_id": ["Tender ID"],
+            "work_order": ["Work Order No", "Work order No"]
+          }
+        },
+        "gpani_community": {
+          "label": "GPANI community-based water facility export",
+          "required": ["geocode", "division", "tank_capacity"],
+          "fields": {
+            "geocode": ["GEO Code", "geo code", "Geocode"],
+            "division": ["Division"],
+            "district": ["District"],
+            "upazila": ["Upazila"],
+            "union": ["Union"],
+            "village": ["Village"],
+            "latitude": ["Lattitude", "Latitude"],
+            "longitude": ["Longtitute", "Longitude", "Longitute"],
+            "depth": ["Tubewell Depth", "Depth"],
+            "tank_capacity": ["Tank Capacity"],
+            "pipe_length": ["Pipe Length"],
+            "financial_year": ["Financial Year"],
+            "tender_id": ["Tender ID"],
+            "work_order": ["Work order No", "Work Order No"]
+          }
+        }
+      }
+    },
+    "WPMS": {
+      "label": "Water Point Management System (WPMS)",
+      "formats": {
+        "wpms_tubewell_list": {
+          "label": "WPMS tubewell final list export",
+          "required": ["go_code", "division"],
+          "fields": {
+            "serial": ["SL No", "SL"],
+            "package": ["Package"],
+            "project": ["Project"],
+            "division": ["Division"],
+            "district": ["District"],
+            "upazila": ["Upazila"],
+            "union": ["Union"],
+            "village": ["Village"],
+            "go_code": ["GO Code", "G.O Code", "GO-Code"],
+            "facility_type": ["Type", "Facility Type"],
+            "total_depth": ["Total Depth (Meter)", "Total Depth", "Depth (m)"],
+            "water_quality": ["Water Quality"],
+            "installation_date": ["Installation Date"],
+            "platform_date": ["Platform Construction Date"],
+            "status": ["Current Status", "Status"],
+            "latitude": ["GPS Latitude", "Latitude"],
+            "longitude": ["GPS Longitude", "Longitude"],
+            "created_at": ["Created At"]
+          }
+        }
+      }
+    },
+    "BORELOG": {
+      "label": "Bore log engineering records",
+      "formats": {
+        "borelog_workbook": {
+          "label": "Bore log workbook (5 linked tabs keyed by ID)",
+          "sheets": {
+            "general": ["General Information"],
+            "fixtures": ["Well Fixtures"],
+            "water_quality": ["Water Quality"],
+            "lithology": ["Lithology & Well Description", "Lithology"],
+            "surface": ["Surface Water Information", "Surface Water"]
+          },
+          "required": ["id"],
+          "fields": {
+            "general": {
+              "id": ["ID"], "project": ["Project Name"], "tw_id": ["TW ID No.", "TW ID No", "TW ID"],
+              "drilling_no": ["Drilling No"], "latitude": ["Latitude"], "longitude": ["Longitude"],
+              "division": ["Division"], "district": ["District"], "upazila": ["Upazila"],
+              "union": ["Union/Pouroshova", "Union"], "village": ["Village/Mahalla", "Village"],
+              "drilling_started": ["Drilling Started"], "drilling_ended": ["Drilling Ended"],
+              "installation_started": ["Installation Started"], "installation_ended": ["Installation Ended"],
+              "drilling_method": ["Drilling Method"], "borehole_diameter": ["Borehole Diameter"],
+              "drilling_depth": ["Drilling Depth"], "well_depth": ["Well Depth"],
+              "screen_location": ["Screen (Filter) Location"], "well_diameter": ["Well Diameter"],
+              "tw_type": ["TW Type"], "samples_collected": ["Lithological Samples Collected"],
+              "logging_result": ["Logging Result"]
+            },
+            "fixtures": {
+              "id": ["ID"], "top_casing": ["Top Casing Pipe"], "blind_pipe": ["Blind Pipe"],
+              "screen_filter": ["Screen (Filter)"], "sand_trap": ["Sand Trap"], "depth_of_logging": ["Depth of Logging"]
+            },
+            "water_quality": {
+              "id": ["ID"], "lab_name": ["Lab Name"], "sampling_date": ["Sampling Date"], "analysis_date": ["Analysis Date"],
+              "ec": ["EC"], "ph": ["pH"], "arsenic": ["Arsenic"], "chloride": ["Chloride"], "iron": ["Iron"], "manganese": ["Manganese"]
+            },
+            "lithology": {
+              "id": ["ID"], "from": ["From"], "to": ["To"], "color": ["Color Name"], "color_code": ["Color Code"],
+              "lithology": ["Lithology Type"], "lithology_code": ["Lithology Code"], "remarks": ["Remarks"]
+            },
+            "surface": {
+              "id": ["ID"], "river": ["The names of the flowing rivers"],
+              "dry_flow": ["The water level of the river mentioned during the dry season"],
+              "quality_opinion": ["Opinion on water quality"],
+              "dry_depth_ft": ["শুষ্ক মৌসুমে নদীতে পানির গভীরতা (ফিট)"],
+              "dry_quality": ["শুষ্ক মৌসুমে নদীতে পানির গুনাগুন", "Water Quality (dry)"]
+            }
+          }
+        }
+      }
+    }
+  }
+}
