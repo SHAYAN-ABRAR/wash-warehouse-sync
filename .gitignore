@@ -1,0 +1,134 @@
+# =====================================================================
+#  WASH Warehouse Sync — repository ignore rules
+#  PRIVACY FIRST: real warehouse workbooks, source exports, audits,
+#  manifests, crosswalks, credentials and backups must never be committed.
+#  The only spreadsheets allowed in Git are small SYNTHETIC fixtures under
+#  tests/fixtures/synthetic/ and examples/sources/ (see the allow-list at the end).
+# =====================================================================
+
+# ---- Real warehouse & source data (any spreadsheet / data export) ----
+*.xlsx
+*.xlsm
+*.xls
+*.xlsb
+*.ods
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.sqlite
+*.sqlite3
+*.db
+*.zip
+*.7z
+*.gz
+*.tar
+*.psql
+*.sql.gz
+*.dump
+
+# Private engine state (manifest, fingerprints, crosswalk, history, versions, audits)
+.wash_sync/
+wash_sync_state/
+private/
+data/
+input/
+inputs/
+output/
+outputs/
+exports/
+backups/
+audit/
+audits/
+runs/
+manifest.json
+source_fingerprints.jsonl
+facility_crosswalk.csv
+change_history.jsonl
+pending_conflicts.json
+warehouse_versions.json
+*.partial
+*.tmp
+*.lock
+*.journal.json
+
+# Temporary worksheet XML & scratch
+*.xml.tmp
+tmp/
+temp/
+scratch/
+.scratch/
+
+# Large generated synthetic workbooks (scale tests generate these on demand)
+tests/scale/generated/
+*.generated.xlsx
+
+# ---- Credentials & environment ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+service-account*.json
+token*.json
+client_secret*.json
+.netrc
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# ---- Node / frontend ----
+node_modules/
+apps/web/dist/
+apps/web/dist-local/
+apps/web/coverage/
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/blob-report/
+apps/web/.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Editors / OS ----
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*.swo
+.vscode/*
+!.vscode/extensions.json
+
+# =====================================================================
+#  Allow-list: small, deterministic, 100% SYNTHETIC files only.
+# =====================================================================
+!tests/fixtures/synthetic/
+!tests/fixtures/synthetic/*.csv
+!tests/fixtures/synthetic/*.xlsx
+!tests/fixtures/synthetic/*.xls
+!examples/sources/
+!examples/sources/*.csv
+!examples/sources/*.xlsx
+!apps/web/public/demo/
+!apps/web/public/demo/**
+!apps/web/public/demo/samples/*.csv
+!apps/web/public/demo/samples/*.xlsx
