@@ -41,6 +41,7 @@ function fakeProvider(mode: 'demo' | 'local' = 'demo'): DataProvider {
   return {
     mode,
     status: async () => status,
+    init: none,
     history: async () => ({ current_version: 1, versions: [version], events: status.recent_events }),
     pending: async () => [],
     plans: async () => [planList],

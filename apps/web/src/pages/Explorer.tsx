@@ -35,8 +35,9 @@ export default function Explorer() {
   const facets = useResource(() => api.facets(), [api])
   const [search, setSearch] = React.useState('')
   const q = useDebounced(search)
-  const [filters, setFilters] = React.useState({ division: '', source: '', match_status: '', gps: '', flag: '' })
+  const [filters, setFilters] = React.useState({ division: '', district: '', source: '', match_status: '', gps: '', flag: '' })
   const flag = useDebounced(filters.flag)
+  const district = useDebounced(filters.district)
   const [offset, setOffset] = React.useState(0)
   const [columns, setColumns] = React.useState<string[]>(() => {
     try {
@@ -47,10 +48,10 @@ export default function Explorer() {
   })
   const [pickOpen, setPickOpen] = React.useState(false)
   const [detailRow, setDetailRow] = React.useState<number | null>(null)
-  React.useEffect(() => setOffset(0), [q, filters.division, filters.source, filters.match_status, filters.gps, flag])
+  React.useEffect(() => setOffset(0), [q, filters.division, district, filters.source, filters.match_status, filters.gps, flag])
   const page = useResource(
-    () => api.rows({ q, ...filters, flag, columns, offset, limit: PAGE }),
-    [api, q, filters.division, filters.source, filters.match_status, filters.gps, flag, columns.join(','), offset],
+    () => api.rows({ q, ...filters, district, flag, columns, offset, limit: PAGE }),
+    [api, q, filters.division, district, filters.source, filters.match_status, filters.gps, flag, columns.join(','), offset],
   )
   const detail = useResource(() => (detailRow ? api.row(detailRow) : Promise.resolve(null)), [api, detailRow])
   const activeFilters = Object.entries(filters).filter(([, v]) => v)
@@ -119,6 +120,13 @@ export default function Explorer() {
                   </option>
                 ))}
               </NativeSelect>
+              <Input
+                className="w-40"
+                placeholder="District…"
+                value={filters.district}
+                onChange={(e) => setFilters((f) => ({ ...f, district: e.target.value }))}
+                aria-label="District"
+              />
               <NativeSelect value={filters.source} onChange={(e) => setFilters((f) => ({ ...f, source: e.target.value }))} aria-label="Source">
                 <option value="">All sources</option>
                 {Object.entries(SOURCE_META).map(([k, v]) => (

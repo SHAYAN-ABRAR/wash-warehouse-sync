@@ -53,6 +53,7 @@ export interface ItemFilter {
 export interface RowsQuery {
   q?: string
   division?: string
+  district?: string
   source?: string
   match_status?: string
   flag?: string
@@ -77,6 +78,7 @@ export interface SchemaResponse {
 export interface DataProvider {
   mode: Mode
   status(): Promise<StatusResponse>
+  init(warehousePath: string): Promise<Job>
   history(): Promise<HistoryResponse>
   pending(): Promise<Record<string, unknown>[]>
   plans(): Promise<PlanListItem[]>
@@ -156,6 +158,8 @@ class LocalProvider implements DataProvider {
   }
 
   status = () => this.req<StatusResponse>('/status')
+  init = (warehousePath: string) =>
+    this.req<Job>('/init', { method: 'POST', body: JSON.stringify({ warehouse_path: warehousePath }) })
   history = () => this.req<HistoryResponse>('/versions')
   pending = () => this.req<Record<string, unknown>[]>('/pending')
   plans = () => this.req<PlanListItem[]>('/plans')
@@ -239,6 +243,9 @@ class DemoProvider implements DataProvider {
   }
 
   status = () => this.get<StatusResponse>('status.json')
+  async init(): Promise<Job> {
+    throw new DemoUnavailableError('Registering a warehouse')
+  }
   history = () => this.get<HistoryResponse>('versions.json')
   pending = () => this.get<Record<string, unknown>[]>('pending.json')
   plans = () => this.get<PlanListItem[]>('plans.json')
@@ -336,6 +343,7 @@ class DemoProvider implements DataProvider {
       )
     }
     if (q.division) rows = rows.filter((r) => String(r.values.division ?? '').toUpperCase() === q.division!.toUpperCase())
+    if (q.district) rows = rows.filter((r) => String(r.values.district ?? '').toUpperCase() === q.district!.toUpperCase())
     if (q.match_status) rows = rows.filter((r) => r.values.match_status === q.match_status)
     if (q.flag) rows = rows.filter((r) => String(r.values.quality_flags ?? '').includes(q.flag!))
     if (q.source) {
