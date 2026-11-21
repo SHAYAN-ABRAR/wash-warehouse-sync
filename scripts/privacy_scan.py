@@ -6,9 +6,13 @@ bore-log IDs and TW IDs) from a *private* warehouse index and checks every file
 that Git would publish for any occurrence. Also blocks spreadsheets and large
 files outside the synthetic allow-list. Exit code 1 means: do not push.
 
-    python scripts/privacy_scan.py --index ~/.wash_sync/index/<sha>.v5.sqlite
+    python scripts/privacy_scan.py --index ~/.wash_sync/index/<sha>.v6.sqlite
 
-The scan reads the private index at runtime; no identifiers are stored here.
+Matching is exact and linear-time: every real identifier contains a run of at least
+nine digits (geocodes, GO codes, TW IDs, AquaWatch and bore-log IDs), so each file's
+digit runs are checked against the set of identifier digit runs, and candidate-ID
+tokens (``GP:…``, ``WPMS:…``, ``AQUA…:…``, ``BORELOG:…``) are checked verbatim.
+No identifiers are stored in this script or in the repository.
 """
 
 from __future__ import annotations
@@ -23,6 +27,9 @@ import sys
 ALLOWED_DATA = ("tests/fixtures/synthetic/", "examples/sources/", "apps/web/public/demo/")
 DATA_EXT = (".xlsx", ".xls", ".xlsm", ".csv", ".sqlite", ".db", ".zip", ".psql")
 MAX_BYTES = 5 * 1024 * 1024
+DIGIT_RUN = re.compile(r"[0-9]{9,}")
+CANDIDATE_TOKEN = re.compile(r"(?:GP|WPMS|BORELOG|AQUA[0-9A-Z]*):[^\s\"',;|<>]+")
+BANGLA = str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")
 
 
 def tracked_files(root: str) -> list[str]:
@@ -31,24 +38,24 @@ def tracked_files(root: str) -> list[str]:
     return [line for line in out.splitlines() if line]
 
 
-def load_identifiers(index_path: str, min_len: int) -> set[str]:
+def load_identifiers(index_path: str) -> tuple[set[str], set[str]]:
     conn = sqlite3.connect(f"file:{index_path}?mode=ro", uri=True)
-    ids: set[str] = set()
+    runs: set[str] = set()
+    candidates: set[str] = set()
     for col in ("candidate_id", "aqua_gwc_id", "borelog_id", "borelog_tw_id", "wpms_go_code", "gpani_geocode"):
         for (value,) in conn.execute(f"SELECT DISTINCT {col} FROM rows WHERE {col} IS NOT NULL"):
-            value = str(value).strip()
-            # Short generic tokens (e.g. 'GWC 1') would match ordinary text; only distinctive ones are checked.
-            if len(value) >= min_len and re.search(r"\d{5,}", value):
-                ids.add(value)
+            text = str(value).translate(BANGLA)
+            if col == "candidate_id":
+                candidates.add(text)
+            runs.update(DIGIT_RUN.findall(text))
     conn.close()
-    return ids
+    return runs, candidates
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--index", required=True, help="Private warehouse index (.sqlite)")
     parser.add_argument("--root", default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    parser.add_argument("--min-length", type=int, default=8)
     args = parser.parse_args()
     files = tracked_files(args.root)
     problems: list[str] = []
@@ -58,25 +65,31 @@ def main() -> int:
             problems.append(f"data file outside the synthetic allow-list: {f}")
         if os.path.isfile(full) and os.path.getsize(full) > MAX_BYTES and not f.endswith("package-lock.json"):
             problems.append(f"large file ({os.path.getsize(full):,} bytes): {f}")
-    identifiers = load_identifiers(args.index, args.min_length)
-    print(f"Loaded {len(identifiers):,} distinctive real identifiers from the private index")
-    by_digits = {re.sub(r"\D", "", i) for i in identifiers if len(re.sub(r"\D", "", i)) >= 10}
-    digit_run = re.compile(r"\d{10,}")
+    runs, candidates = load_identifiers(args.index)
+    print(f"Loaded {len(runs):,} identifier digit runs and {len(candidates):,} candidate IDs from the private index")
+    scanned = 0
     for f in files:
         full = os.path.join(args.root, f)
-        if not os.path.isfile(full) or os.path.getsize(full) > 50 * 1024 * 1024:
+        if not os.path.isfile(full):
             continue
-        try:
-            text = open(full, encoding="utf-8", errors="ignore").read()
-        except OSError:
-            continue
-        for run in set(digit_run.findall(text)):
-            if run in by_digits:
-                problems.append(f"real identifier digits {run[:4]}… found in {f}")
-        for ident in identifiers:
-            if not ident.isdigit() and ident in text:
-                problems.append(f"real identifier {ident[:6]}… found in {f}")
-    print(f"Scanned {len(files):,} publishable files")
+        with open(full, "rb") as fh:
+            raw = fh.read()
+        if f.lower().endswith((".xlsx", ".xlsm")):
+            import zipfile  # noqa: PLC0415
+
+            try:
+                with zipfile.ZipFile(full) as zf:
+                    raw = b"".join(zf.read(n) for n in zf.namelist() if n.endswith(".xml"))
+            except zipfile.BadZipFile:
+                problems.append(f"unreadable workbook: {f}")
+                continue
+        text = raw.decode("utf-8", errors="ignore").translate(BANGLA)
+        scanned += 1
+        for run in set(DIGIT_RUN.findall(text)) & runs:
+            problems.append(f"real identifier digits {run[:4]}…({len(run)} digits) found in {f}")
+        for token in set(CANDIDATE_TOKEN.findall(text)) & candidates:
+            problems.append(f"real candidate ID {token[:8]}… found in {f}")
+    print(f"Scanned {scanned:,} publishable files (workbooks unpacked)")
     if problems:
         print("PRIVACY SCAN FAILED:")
         for p in sorted(set(problems))[:100]:
