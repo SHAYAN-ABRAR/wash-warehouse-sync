@@ -325,7 +325,26 @@ def demo_data(out: str = typer.Option("apps/web/public/demo", help="Output folde
     console.print(f"[green]Demo bundle written[/] to {out}: {info}")
 
 
+def _ensure_unicode_output() -> None:
+    """Let stdout/stderr print arrows, µg/L and Bangla names whatever the code page.
+
+    An interactive Windows console is already Unicode, but piped or redirected output
+    (CI logs, ``> report.txt``, scheduled tasks) falls back to the legacy code page
+    (e.g. cp1252), where Rich raises UnicodeEncodeError on the first such character.
+    Such streams are switched to UTF-8, and an unencodable character never aborts a command.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "").replace("_", "")
+        if encoding.startswith("utf") or not hasattr(stream, "reconfigure"):
+            continue
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):  # detached or closed stream: leave it alone
+            pass
+
+
 def main() -> None:
+    _ensure_unicode_output()
     try:
         app()
     except KeyboardInterrupt:

@@ -148,7 +148,7 @@ Full rules: [docs/matching-rules.md](docs/matching-rules.md) · state and audit 
 
 | Suite | Tests |
 |---|---|
-| Python unit + integration + local API (`pytest`) | 120 |
+| Python unit + integration + local API (`pytest`) | 122 |
 | Web unit + component (`vitest`) | 24 |
 | End-to-end on the production Pages build (`playwright`, desktop + mobile) | 11 |
 
