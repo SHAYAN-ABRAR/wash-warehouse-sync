@@ -1,0 +1,74 @@
+{
+  "plan_id": "plan-20261119-175415-09da9d",
+  "base_version": 0,
+  "base_rows": 2340,
+  "records_total": 169,
+  "by_classification": {
+    "NEW_FACILITY": 18,
+    "NEW_OBSERVATION": 120,
+    "NEW_SOURCE_METADATA": 4,
+    "UPDATED_MEASUREMENT": 1,
+    "FILLED_MISSING_VALUE": 0,
+    "UNCHANGED": 21,
+    "EXACT_DUPLICATE": 2,
+    "POTENTIAL_DUPLICATE": 0,
+    "CONFLICTING_IDENTITY": 0,
+    "CONFLICTING_MEASUREMENT": 0,
+    "INVALID_SOURCE_RECORD": 3,
+    "REQUIRES_REVIEW": 0
+  },
+  "by_source": {
+    "AQUAWATCH": {
+      "NEW_OBSERVATION": 120,
+      "NEW_FACILITY": 12,
+      "EXACT_DUPLICATE": 2,
+      "INVALID_SOURCE_RECORD": 2,
+      "UPDATED_MEASUREMENT": 1
+    },
+    "WPMS": {
+      "NEW_SOURCE_METADATA": 4,
+      "UNCHANGED": 21,
+      "NEW_FACILITY": 6,
+      "INVALID_SOURCE_RECORD": 1
+    }
+  },
+  "auto_operations": 138,
+  "auto_inserts": 18,
+  "auto_updates": 120,
+  "review_items": 5,
+  "undecided_review_items": 5,
+  "new_columns": [
+    "aqua_2027_dry_arsenic_raw",
+    "aqua_2027_dry_water_table_m",
+    "aqua_2027_dry_iron_raw",
+    "aqua_2027_dry_chloride_raw",
+    "aqua_2027_dry_source_row"
+  ],
+  "files": [
+    {
+      "file": "aquawatch_survey_2027_dry.xlsx",
+      "source": "AQUAWATCH",
+      "format": "aquawatch_survey",
+      "records": 136,
+      "periods": [
+        "2027_dry"
+      ]
+    },
+    {
+      "file": "wpms_tubewell_list_update.xlsx",
+      "source": "WPMS",
+      "format": "wpms_tubewell_list",
+      "records": 32,
+      "periods": []
+    },
+    {
+      "file": "aquawatch_2026_wet_recheck.csv",
+      "source": "AQUAWATCH",
+      "format": "aquawatch_survey",
+      "records": 1,
+      "periods": [
+        "2026_wet"
+      ]
+    }
+  ]
+}

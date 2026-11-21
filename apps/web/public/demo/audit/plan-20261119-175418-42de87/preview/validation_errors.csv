@@ -1,0 +1,9 @@
+﻿run_id,source,input_file,input_row,source_record_id,severity,code,field,message,record_classification
+plan-20261119-175418-42de87,AQUAWATCH,aquawatch_survey_2027_wet.xlsx,107,NO GROUND WATER RESOURCE,ERROR,NO_MEASUREMENTS,,Survey row has no measurements for the period,INVALID_SOURCE_RECORD
+plan-20261119-175418-42de87,AQUAWATCH,aquawatch_survey_2027_wet.xlsx,107,NO GROUND WATER RESOURCE,WARNING,NON_NUMERIC_SOURCE_ID,resource_id,Resource ID 'NO GROUND WATER RESOURCE' contains no digits,INVALID_SOURCE_RECORD
+plan-20261119-175418-42de87,AQUAWATCH,aquawatch_survey_2027_wet.xlsx,107,NO GROUND WATER RESOURCE,WARNING,GPS_MISSING,latitude,No GPS coordinates; geographic duplicate checks are not possible,INVALID_SOURCE_RECORD
+plan-20261119-175418-42de87,AQUAWATCH,aquawatch_survey_2027_wet.xlsx,107,NO GROUND WATER RESOURCE,WARNING,MISSING_TUBEWELL_TYPE,well_type,Type of tubewell is blank,INVALID_SOURCE_RECORD
+plan-20261119-175418-42de87,AQUAWATCH,aquawatch_survey_2027_wet.xlsx,107,NO GROUND WATER RESOURCE,WARNING,MISSING_WATER_TABLE,water_table,AquaWatch survey row has no water-table measurement,INVALID_SOURCE_RECORD
+plan-20261119-175418-42de87,AQUAWATCH,aquawatch_survey_2027_wet.xlsx,108,SYN-002192,ERROR,SURVEY_PERIOD_PROBLEM,survey_year,Survey year is blank,INVALID_SOURCE_RECORD
+plan-20261119-175418-42de87,BORELOG,borelog_workbook_update.xlsx,13,SYNBL-TEST-01,REVIEW,SUSPICIOUS_TEST_RECORD,drilling_depth,"drilling depth '12345 m' (12,345 m) looks like a test or placeholder value",REQUIRES_REVIEW
+plan-20261119-175418-42de87,BORELOG,borelog_workbook_update.xlsx,13,SYNBL-TEST-01,REVIEW,SUSPICIOUS_TEST_RECORD,well_depth,"well depth '12345 m' (12,345 m) looks like a test or placeholder value",REQUIRES_REVIEW

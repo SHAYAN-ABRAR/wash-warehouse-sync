@@ -25,7 +25,7 @@ from .schema import WarehouseSchema, parse_period_column
 from .text import norm_code, norm_id, norm_key, split_tokens, to_text
 from .xlsx.reader import SheetStream, load_shared_strings, read_workbook_info
 
-INDEX_FORMAT = 5
+INDEX_FORMAT = 6
 SRC_BITS = {"GPANI": 1, "WPMS": 2, "AQUAWATCH": 4, "BORELOG": 8}
 _COLS_RE = re.compile(rb'<col\b([^>]*?)/>')
 
@@ -555,8 +555,10 @@ class _QualityAccumulator:
                 self.unit_issues += 1
             if "CONFLICT" in flag:
                 self.conflict_flags += 1
-        for token in split_tokens(named.get("record_sources")):
-            self.sources[token.split("_")[0] if token.startswith("AQUA") else token] += 1
+        families = {token.split("_")[0] if token.startswith("AQUA") else token
+                    for token in split_tokens(named.get("record_sources"))}
+        for family in families:  # rows carrying each source system (once per row)
+            self.sources[family] += 1
         self.match_status[to_text(named.get("match_status")) or ""] += 1
         for col, (lo, hi, _unit) in OUTLIER_RULES.items():
             v = _num(named.get(col)) if col in named else None

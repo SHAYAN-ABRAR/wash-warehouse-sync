@@ -1,0 +1,90 @@
+{
+  "plan_id": "plan-20261119-175418-42de87",
+  "base_version": 1,
+  "base_rows": 2358,
+  "records_total": 164,
+  "by_classification": {
+    "NEW_FACILITY": 14,
+    "NEW_OBSERVATION": 93,
+    "NEW_SOURCE_METADATA": 0,
+    "UPDATED_MEASUREMENT": 9,
+    "FILLED_MISSING_VALUE": 0,
+    "UNCHANGED": 34,
+    "EXACT_DUPLICATE": 2,
+    "POTENTIAL_DUPLICATE": 4,
+    "CONFLICTING_IDENTITY": 3,
+    "CONFLICTING_MEASUREMENT": 2,
+    "INVALID_SOURCE_RECORD": 2,
+    "REQUIRES_REVIEW": 1
+  },
+  "by_source": {
+    "AQUAWATCH": {
+      "NEW_OBSERVATION": 89,
+      "CONFLICTING_MEASUREMENT": 2,
+      "NEW_FACILITY": 8,
+      "POTENTIAL_DUPLICATE": 4,
+      "EXACT_DUPLICATE": 2,
+      "INVALID_SOURCE_RECORD": 2,
+      "UPDATED_MEASUREMENT": 6,
+      "UNCHANGED": 4
+    },
+    "BORELOG": {
+      "UPDATED_MEASUREMENT": 3,
+      "NEW_OBSERVATION": 4,
+      "NEW_FACILITY": 3,
+      "CONFLICTING_IDENTITY": 1,
+      "REQUIRES_REVIEW": 1
+    },
+    "GPANI": {
+      "UNCHANGED": 30,
+      "NEW_FACILITY": 3,
+      "CONFLICTING_IDENTITY": 2
+    }
+  },
+  "auto_operations": 107,
+  "auto_inserts": 14,
+  "auto_updates": 93,
+  "review_items": 18,
+  "undecided_review_items": 18,
+  "new_columns": [
+    "aqua_2027_wet_arsenic_raw",
+    "aqua_2027_wet_water_table_m",
+    "aqua_2027_wet_iron_raw",
+    "aqua_2027_wet_chloride_raw",
+    "aqua_2027_wet_source_row"
+  ],
+  "files": [
+    {
+      "file": "aquawatch_survey_2027_wet.xlsx",
+      "source": "AQUAWATCH",
+      "format": "aquawatch_survey",
+      "records": 107,
+      "periods": [
+        "2027_wet"
+      ]
+    },
+    {
+      "file": "aquawatch_2026_wet_corrections.csv",
+      "source": "AQUAWATCH",
+      "format": "aquawatch_survey",
+      "records": 10,
+      "periods": [
+        "2026_wet"
+      ]
+    },
+    {
+      "file": "borelog_workbook_update.xlsx",
+      "source": "BORELOG",
+      "format": "borelog_workbook",
+      "records": 12,
+      "periods": []
+    },
+    {
+      "file": "gpani_tubewell_report.xlsx",
+      "source": "GPANI",
+      "format": "gpani_tubewell_report",
+      "records": 35,
+      "periods": []
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+﻿run_id,source,input_file,input_row,source_record_id,severity,code,field,message,record_classification
+plan-20261119-175415-09da9d,AQUAWATCH,aquawatch_survey_2027_dry.xlsx,136,,ERROR,MISSING_SOURCE_ID,resource_id,Ground Water Resource ID is blank,INVALID_SOURCE_RECORD
+plan-20261119-175415-09da9d,AQUAWATCH,aquawatch_survey_2027_dry.xlsx,136,,WARNING,GPS_MISSING,latitude,No GPS coordinates; geographic duplicate checks are not possible,INVALID_SOURCE_RECORD
+plan-20261119-175415-09da9d,AQUAWATCH,aquawatch_survey_2027_dry.xlsx,136,,WARNING,MISSING_TUBEWELL_TYPE,well_type,Type of tubewell is blank,INVALID_SOURCE_RECORD
+plan-20261119-175415-09da9d,AQUAWATCH,aquawatch_survey_2027_dry.xlsx,137,SYN-002191,ERROR,SURVEY_PERIOD_PROBLEM,survey_year,Unrecognized survey year/season label '2027 (Monsoon)',INVALID_SOURCE_RECORD
+plan-20261119-175415-09da9d,WPMS,wpms_tubewell_list_update.xlsx,33,,ERROR,MISSING_SOURCE_ID,go_code,WPMS GO code is blank,INVALID_SOURCE_RECORD

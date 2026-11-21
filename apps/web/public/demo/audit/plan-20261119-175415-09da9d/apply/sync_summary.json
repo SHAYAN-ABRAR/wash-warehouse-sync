@@ -1,0 +1,127 @@
+{
+  "plan_id": "plan-20261119-175415-09da9d",
+  "version": 1,
+  "file": "WASH_Warehouse_v001.xlsx",
+  "sha256": "7d05eb1bf73620e2b6f7f946c5584bcaaa7b963ed6b854cf0d40a5e677a39648",
+  "previous_version": 0,
+  "counts": {
+    "added_facilities": 18,
+    "updated_facilities": 124,
+    "new_observations": 120,
+    "filled_missing_values": 0,
+    "updated_measurements": 4,
+    "duplicates_skipped": 2,
+    "unchanged_skipped": 21,
+    "conflicts": 5,
+    "deferred": 1,
+    "rejected": 0,
+    "invalid": 3,
+    "refused_fills": 0
+  },
+  "new_columns": [
+    "aqua_2027_dry_arsenic_raw",
+    "aqua_2027_dry_water_table_m",
+    "aqua_2027_dry_iron_raw",
+    "aqua_2027_dry_chloride_raw",
+    "aqua_2027_dry_source_row"
+  ],
+  "rows": 2358,
+  "columns": 201,
+  "validation": {
+    "ok": true,
+    "checks": [
+      {
+        "name": "zip_crc",
+        "status": "PASS",
+        "detail": "all members pass CRC"
+      },
+      {
+        "name": "single_worksheet",
+        "status": "PASS",
+        "detail": "1 worksheet(s): ['FLAT_WASH_WAREHOUSE']"
+      },
+      {
+        "name": "content_types_single_sheet",
+        "status": "PASS",
+        "detail": "worksheet parts: ['xl/worksheets/sheet1.xml']"
+      },
+      {
+        "name": "xml_well_formed",
+        "status": "PASS",
+        "detail": "8 parts parsed"
+      },
+      {
+        "name": "row_and_cell_order",
+        "status": "PASS",
+        "detail": "strictly increasing"
+      },
+      {
+        "name": "excel_limits",
+        "status": "PASS",
+        "detail": "2,359 rows x 201 columns"
+      },
+      {
+        "name": "cell_length_limit",
+        "status": "PASS",
+        "detail": "0 cells exceed 32767 chars"
+      },
+      {
+        "name": "dimension",
+        "status": "PASS",
+        "detail": "declared A1:GS2359, actual A1:GS2359"
+      },
+      {
+        "name": "autofilter_range",
+        "status": "PASS",
+        "detail": "autoFilter A1:GS2359 vs data A1:GS2359"
+      },
+      {
+        "name": "filter_defined_name",
+        "status": "PASS",
+        "detail": "_FilterDatabase FLAT_WASH_WAREHOUSE!$A$1:$GS$2359 (sheet autoFilter A1:GS2359)"
+      },
+      {
+        "name": "frozen_header",
+        "status": "PASS",
+        "detail": "frozen panes present"
+      },
+      {
+        "name": "header_row",
+        "status": "PASS",
+        "detail": "matches plan"
+      },
+      {
+        "name": "row_count",
+        "status": "PASS",
+        "detail": "2,358 data rows (expected 2,358)"
+      },
+      {
+        "name": "independent_reader",
+        "status": "PASS",
+        "detail": "openpyxl opened the workbook and read header + 49 rows"
+      }
+    ],
+    "preservation": {
+      "compared_rows": 2340,
+      "patched_rows_checked": 184,
+      "inserted_rows": 18
+    }
+  },
+  "refused_fills": [],
+  "skipped_dependent_operations": [],
+  "output_version": 1,
+  "by_classification": {
+    "NEW_FACILITY": 18,
+    "NEW_OBSERVATION": 120,
+    "NEW_SOURCE_METADATA": 4,
+    "UPDATED_MEASUREMENT": 1,
+    "FILLED_MISSING_VALUE": 0,
+    "UNCHANGED": 21,
+    "EXACT_DUPLICATE": 2,
+    "POTENTIAL_DUPLICATE": 0,
+    "CONFLICTING_IDENTITY": 0,
+    "CONFLICTING_MEASUREMENT": 0,
+    "INVALID_SOURCE_RECORD": 3,
+    "REQUIRES_REVIEW": 0
+  }
+}
