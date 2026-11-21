@@ -14,12 +14,12 @@ import os
 
 import openpyxl
 import pytest
-
-from tests.conftest import aqua_row, aqua_rows, current_path, preview, table, write_survey
 from wash_sync.engine import EngineError
 from wash_sync.records import ChangeClass
 from wash_sync.synthetic import GPANI_HEADERS, WPMS_HEADERS, write_borelog_workbook, write_table
 from wash_sync.xlsx.writer import OperationCancelled
+
+from tests.conftest import aqua_row, aqua_rows, current_path, preview, table, write_survey
 
 DRY = "2027 (Dry Season)"
 
@@ -188,9 +188,10 @@ def _bore_general(row, **kw):
 def _litho_rows(row, extra=None, change=False):
     layers = json.loads(row["borelog_lithology_profile_raw"])
     out = []
-    for i, l in enumerate(layers):
-        lith = "Gravel" if (change and i == 0) else l["lithology"]
-        out.append([row["borelog_id"], "", "", l["from"], l["to"], l["color"], l["color_code"], lith, l["lithology_code"], ""])
+    for i, layer in enumerate(layers):
+        lith = "Gravel" if (change and i == 0) else layer["lithology"]
+        out.append([row["borelog_id"], "", "", layer["from"], layer["to"], layer["color"], layer["color_code"], lith,
+                    layer["lithology_code"], ""])
     for e in extra or []:
         out.append([row["borelog_id"], "", "", *e])
     return out
@@ -288,7 +289,7 @@ def test_false_gps_only_match_is_not_merged(engine, world, tmp_path):
     assert len(rows) == len(world.rows) + 1
     assert next(r for r in rows if r.get("candidate_id") == gp["candidate_id"]).get("aqua_gwc_id") is None
     links = engine.store.crosswalk()
-    assert any(l["link_type"] == "KEEP_SEPARATE" and l["source_record_id"] == "SYN-COINCIDENT" for l in links)
+    assert any(link["link_type"] == "KEEP_SEPARATE" and link["source_record_id"] == "SYN-COINCIDENT" for link in links)
 
 
 def test_approved_geographic_match_writes_into_existing_row(engine, world, tmp_path):

@@ -5,7 +5,6 @@ import zipfile
 
 import openpyxl
 import pytest
-
 from wash_sync.adapters.base import AdapterContext, default_resolver, detect_source, read_records
 from wash_sync.adapters.borelog import comparable_layers, lithology_profile
 from wash_sync.changes import layers_appended, values_equal
@@ -14,7 +13,14 @@ from wash_sync.synthetic import AQUA_SURVEY_HEADERS, BORE_TABS, write_borelog_wo
 from wash_sync.xlsx.create import SheetSpec, write_workbook
 from wash_sync.xlsx.reader import SheetStream, iter_values, parse_cells, read_workbook_info
 from wash_sync.xlsx.verify import verify_workbook
-from wash_sync.xlsx.writer import CellWrite, NewRow, RewriteSpec, UnsafeWorkbookError, escape_text, rewrite_workbook
+from wash_sync.xlsx.writer import (
+    CellWrite,
+    NewRow,
+    RewriteSpec,
+    UnsafeWorkbookError,
+    escape_text,
+    rewrite_workbook,
+)
 
 
 def _wb(path, headers, rows, **kw):

@@ -123,8 +123,8 @@ class Matcher:
             for lvl, res in cmp.items():
                 ev.append(Evidence(check=f"admin_{lvl}", value=f"{rec.admin.resolved.get(lvl)} / {row.get(lvl)}",
                                    result=res))  # type: ignore[arg-type]
-            verdict["admin"] = "DISAGREE" if any(cmp[l] == "DISAGREE" for l in ("division", "district", "upazila")) else (
-                "AGREE" if all(cmp[l] == "AGREE" for l in ("division", "district", "upazila")) else "UNKNOWN")
+            verdict["admin"] = "DISAGREE" if any(cmp[lv] == "DISAGREE" for lv in ("division", "district", "upazila")) else (
+                "AGREE" if all(cmp[lv] == "AGREE" for lv in ("division", "district", "upazila")) else "UNKNOWN")
             verdict["district"] = cmp["district"]
             verdict["division"] = cmp["division"]
         rtype = row_type_key(row)

@@ -85,7 +85,7 @@ class Settings(BaseModel):
         return os.path.join(self.state_dir, "settings.json")
 
     @classmethod
-    def load(cls, state_dir: str | None = None) -> "Settings":
+    def load(cls, state_dir: str | None = None) -> Settings:
         state_dir = state_dir or default_state_dir()
         path = os.path.join(state_dir, "settings.json")
         if os.path.exists(path):

@@ -6,9 +6,9 @@ import time
 
 import pytest
 from fastapi.testclient import TestClient
+from wash_sync_api.server import create_app
 
 from tests.conftest import aqua_row, aqua_rows, write_survey
-from wash_sync_api.server import create_app
 
 TOKEN = "test-token"
 

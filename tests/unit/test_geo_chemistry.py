@@ -1,7 +1,6 @@
 """Coordinate validation and laboratory unit handling."""
 
 import pytest
-
 from wash_sync.chemistry import parse_measurement, parse_wpms_water_quality
 from wash_sync.geo import haversine_m, resolve_coordinates
 

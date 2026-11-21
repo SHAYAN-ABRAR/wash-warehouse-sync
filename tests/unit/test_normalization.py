@@ -1,9 +1,17 @@
 """Text, identifier, number, depth and date-format normalization."""
 
 import pytest
-
 from wash_sync.numbers import canonical_number, parse_length, parse_number, plain_number
-from wash_sync.text import clean, is_placeholder, join_tokens, norm_code, norm_header, norm_id, norm_key, to_text
+from wash_sync.text import (
+    clean,
+    is_placeholder,
+    join_tokens,
+    norm_code,
+    norm_header,
+    norm_id,
+    norm_key,
+    to_text,
+)
 
 
 def test_bangla_digits_and_ids():

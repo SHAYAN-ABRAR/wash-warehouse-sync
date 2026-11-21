@@ -10,8 +10,9 @@ import getpass
 import json
 import os
 import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator, Optional
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -38,7 +39,7 @@ def _actor() -> str:
         return "local-user"
 
 
-def _engine(state_dir: Optional[str]) -> Engine:
+def _engine(state_dir: str | None) -> Engine:
     return Engine(Settings.load(state_dir or default_state_dir()), state_dir or default_state_dir())
 
 
@@ -67,7 +68,7 @@ def version() -> None:
 
 @app.command()
 def init(warehouse: str = typer.Option(..., "--warehouse", "-w", help="Verified warehouse .xlsx to register as v000"),
-         state_dir: Optional[str] = StateOpt, force: bool = typer.Option(False, help="Register even with warnings")) -> None:
+         state_dir: str | None = StateOpt, force: bool = typer.Option(False, help="Register even with warnings")) -> None:
     """Register the existing verified warehouse as the immutable baseline (copied into private state)."""
     eng = _engine(state_dir)
     try:
@@ -83,8 +84,8 @@ def init(warehouse: str = typer.Option(..., "--warehouse", "-w", help="Verified 
 
 @app.command()
 def inspect(files: list[str] = typer.Argument(..., help="Source exports (.xlsx, .xls, .csv)"),
-            source: Optional[str] = typer.Option(None, help="GPANI | WPMS | AQUAWATCH | BORELOG (default: auto)"),
-            state_dir: Optional[str] = StateOpt, as_json: bool = typer.Option(False, "--json")) -> None:
+            source: str | None = typer.Option(None, help="GPANI | WPMS | AQUAWATCH | BORELOG (default: auto)"),
+            state_dir: str | None = StateOpt, as_json: bool = typer.Option(False, "--json")) -> None:
     """Detect each file's source system, format and column mapping (read-only)."""
     results = _engine(state_dir).inspect(files, source)
     if as_json:
@@ -105,10 +106,10 @@ def inspect(files: list[str] = typer.Argument(..., help="Source exports (.xlsx, 
 
 @app.command()
 def preview(files: list[str] = typer.Argument(..., help="Source exports to compare with the current warehouse"),
-            source: Optional[str] = typer.Option(None, help="Force the source system for all files"),
-            period: Optional[str] = typer.Option(None, help="Expected AquaWatch period, e.g. '2027 dry' or '2027'"),
+            source: str | None = typer.Option(None, help="Force the source system for all files"),
+            period: str | None = typer.Option(None, help="Expected AquaWatch period, e.g. '2027 dry' or '2027'"),
             strict: bool = typer.Option(False, help="Strict validation mode for this run"),
-            state_dir: Optional[str] = StateOpt) -> None:
+            state_dir: str | None = StateOpt) -> None:
     """Dry run: classify every record and write a plan + audit. Nothing is written to the warehouse."""
     eng = _engine(state_dir)
     if strict:
@@ -140,7 +141,7 @@ def _print_plan(plan: Any) -> None:
 
 
 @review_app.command("list")
-def review_list(plan_id: str, state_dir: Optional[str] = StateOpt, undecided_only: bool = False,
+def review_list(plan_id: str, state_dir: str | None = StateOpt, undecided_only: bool = False,
                 limit: int = 50) -> None:
     """List review items with their options."""
     plan = _engine(state_dir).plan(plan_id)
@@ -163,8 +164,8 @@ def review_list(plan_id: str, state_dir: Optional[str] = StateOpt, undecided_onl
 @review_app.command("decide")
 def review_decide(plan_id: str, item_id: str, decision: str = typer.Option(..., "--decision", "-d"),
                   reason: str = typer.Option(..., "--reason", "-r", help="Required explanation"),
-                  option: Optional[int] = typer.Option(None, help="Option index when several share a decision"),
-                  state_dir: Optional[str] = StateOpt) -> None:
+                  option: int | None = typer.Option(None, help="Option index when several share a decision"),
+                  state_dir: str | None = StateOpt) -> None:
     """Record a decision (APPROVE_MATCH, KEEP_SEPARATE, ACCEPT_NEW_VALUES, KEEP_EXISTING, ACCEPT, REJECT, DEFER)."""
     try:
         result = _engine(state_dir).decide(plan_id, item_id, decision.upper(), reason, _actor(), option)
@@ -176,14 +177,14 @@ def review_decide(plan_id: str, item_id: str, decision: str = typer.Option(..., 
 @review_app.command("bulk")
 def review_bulk(plan_id: str, classification: str = typer.Option(..., "--class"),
                 decision: str = typer.Option(..., "--decision", "-d"), reason: str = typer.Option(..., "--reason", "-r"),
-                state_dir: Optional[str] = StateOpt) -> None:
+                state_dir: str | None = StateOpt) -> None:
     """Apply one decision to every undecided item of a classification."""
     n = _engine(state_dir).bulk_decide(plan_id, classification.upper(), decision.upper(), reason, _actor())
     console.print(f"[green]{n} item(s) decided[/]")
 
 
 @app.command()
-def approve(plan_id: str, note: Optional[str] = None, state_dir: Optional[str] = StateOpt) -> None:
+def approve(plan_id: str, note: str | None = None, state_dir: str | None = StateOpt) -> None:
     """Approve a plan. Undecided review items will be deferred (never auto-approved)."""
     try:
         plan = _engine(state_dir).approve(plan_id, _actor(), note)
@@ -196,7 +197,7 @@ def approve(plan_id: str, note: Optional[str] = None, state_dir: Optional[str] =
 def apply(plan_id: str, yes: bool = typer.Option(False, "--yes", help="Explicitly authorize an unapproved plan"),
           require_all_decided: bool = typer.Option(False, help="Fail if any review item is undecided"),
           force_export: bool = typer.Option(False, help="Write a new version even when nothing changes"),
-          state_dir: Optional[str] = StateOpt) -> None:
+          state_dir: str | None = StateOpt) -> None:
     """Apply an approved plan: write → verify → atomically publish the next version."""
     eng = _engine(state_dir)
     try:
@@ -214,8 +215,8 @@ def apply(plan_id: str, yes: bool = typer.Option(False, "--yes", help="Explicitl
 
 
 @app.command()
-def verify(version_number: Optional[int] = typer.Option(None, "--version"), file: Optional[str] = None,
-           quick: bool = typer.Option(False, help="Skip CRC and full XML parse"), state_dir: Optional[str] = StateOpt) -> None:
+def verify(version_number: int | None = typer.Option(None, "--version"), file: str | None = None,
+           quick: bool = typer.Option(False, help="Skip CRC and full XML parse"), state_dir: str | None = StateOpt) -> None:
     """Verify a warehouse version (ZIP, XML, single sheet, ranges, ordering, independent reader)."""
     eng = _engine(state_dir)
     try:
@@ -232,7 +233,7 @@ def verify(version_number: Optional[int] = typer.Option(None, "--version"), file
 
 
 @app.command()
-def history(state_dir: Optional[str] = StateOpt, events: int = 15) -> None:
+def history(state_dir: str | None = StateOpt, events: int = 15) -> None:
     """Show warehouse versions and recent events."""
     h = _engine(state_dir).history()
     table = Table(title=f"Warehouse versions (current: v{h['current_version']:03d})" if h["current_version"] is not None
@@ -252,7 +253,7 @@ def history(state_dir: Optional[str] = StateOpt, events: int = 15) -> None:
 
 @app.command()
 def rollback(to: int = typer.Option(..., "--to", help="Version number to make current"),
-             reason: str = typer.Option(..., "--reason", "-r"), state_dir: Optional[str] = StateOpt) -> None:
+             reason: str = typer.Option(..., "--reason", "-r"), state_dir: str | None = StateOpt) -> None:
     """Make an earlier verified version current again (no files are deleted)."""
     try:
         result = _engine(state_dir).rollback(to, _actor(), reason)
@@ -262,9 +263,9 @@ def rollback(to: int = typer.Option(..., "--to", help="Version number to make cu
 
 
 @app.command()
-def publish(version_number: Optional[int] = typer.Option(None, "--version"),
+def publish(version_number: int | None = typer.Option(None, "--version"),
             confirm: bool = typer.Option(False, "--confirm", help="Required: confirm copying to private storage"),
-            state_dir: Optional[str] = StateOpt) -> None:
+            state_dir: str | None = StateOpt) -> None:
     """Copy a verified version to the configured private storage destination."""
     try:
         result = _engine(state_dir).publish(version_number, _actor(), confirm)
@@ -274,13 +275,13 @@ def publish(version_number: Optional[int] = typer.Option(None, "--version"),
 
 
 @app.command()
-def recover(state_dir: Optional[str] = StateOpt) -> None:
+def recover(state_dir: str | None = StateOpt) -> None:
     """Clean up after an interrupted apply. The verified warehouse is never modified."""
     console.print_json(json.dumps(_engine(state_dir).recover()))
 
 
 @app.command()
-def plans(state_dir: Optional[str] = StateOpt) -> None:
+def plans(state_dir: str | None = StateOpt) -> None:
     """List saved plans."""
     eng = _engine(state_dir)
     for plan_id in eng.store.list_plans():
@@ -292,7 +293,7 @@ def plans(state_dir: Optional[str] = StateOpt) -> None:
 @app.command()
 def serve(host: str = typer.Option("127.0.0.1", help="Bind address (local only by default)"),
           port: int = 8765, open_browser: bool = typer.Option(True, "--open/--no-open"),
-          state_dir: Optional[str] = StateOpt) -> None:
+          state_dir: str | None = StateOpt) -> None:
     """Start the local production app (API + web interface) on this machine."""
     try:
         from wash_sync_api.server import run  # noqa: PLC0415

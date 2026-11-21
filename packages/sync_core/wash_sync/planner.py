@@ -25,12 +25,20 @@ from .config import Settings
 from .index import WarehouseIndex, file_sha256
 from .matching import Matcher
 from .plan import (
-    CellChange, DecisionRecord, MatchInfo, NewColumnModel, Operation, Plan, RecordResult, ReviewItem, ReviewOption,
+    CellChange,
+    DecisionRecord,
+    MatchInfo,
+    NewColumnModel,
+    Operation,
+    Plan,
+    RecordResult,
+    ReviewItem,
+    ReviewOption,
     SourceFileInfo,
 )
 from .records import ChangeClass, Policy, SourceRecord, compute_fingerprint
 from .schema import NewColumn, Period
-from .state import StateStore, atomic_write_json, new_id, now_iso
+from .state import StateStore, new_id, now_iso
 from .text import join_tokens, norm_key
 from .validation import apply_policy
 
@@ -172,7 +180,9 @@ class Planner:
             self.plan.status = "NO_CHANGES"
         self.plan.elapsed_seconds = round(time.time() - started, 2)
         self.audit.close(self.plan.summary, self.plan)
-        atomic_write_json(self.store.plan_path(plan_id), json.loads(self.plan.model_dump_json()))
+        from .apply import save_plan  # noqa: PLC0415
+
+        save_plan(self.store, self.plan, full=True)
         self.store.history_append({"event": "PREVIEW", "plan_id": plan_id, "by": actor, "base_version": current["version"],
                                    "files": [i.file_name for i in self.plan.sources], "summary": self.plan.summary["by_classification"]})
         self._p("done", 1.0, "Preview complete")

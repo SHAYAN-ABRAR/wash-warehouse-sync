@@ -6,7 +6,6 @@ import os
 from typing import Any
 
 import pytest
-
 from wash_sync.config import Settings
 from wash_sync.engine import Engine
 from wash_sync.planner import PreviewInput

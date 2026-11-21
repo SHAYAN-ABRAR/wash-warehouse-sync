@@ -139,14 +139,21 @@ class Engine:
 
     def decide(self, plan_id: str, item_id: str, choice: str, reason: str, actor: str,
                option_index: int | None = None) -> dict[str, Any]:
+        plan = load_plan(self.store, plan_id)
+        result = self._decide_in(plan, item_id, choice, reason, actor, option_index)
+        save_plan(self.store, plan)
+        self.store.history_append(result.pop("_event"))
+        return result
+
+    def _decide_in(self, plan: Plan, item_id: str, choice: str, reason: str, actor: str,
+                   option_index: int | None) -> dict[str, Any]:
         if not reason or not reason.strip():
             raise EngineError("A reason is required for every manual decision")
-        plan = load_plan(self.store, plan_id)
         if plan.status in ("APPLIED", "SUPERSEDED"):
-            raise EngineError(f"Plan {plan_id} is {plan.status}; decisions can no longer change")
+            raise EngineError(f"Plan {plan.plan_id} is {plan.status}; decisions can no longer change")
         item = plan.review_index().get(item_id)
         if item is None:
-            raise EngineError(f"Review item {item_id} not found in plan {plan_id}")
+            raise EngineError(f"Review item {item_id} not found in plan {plan.plan_id}")
         candidates = [i for i, o in enumerate(item.options) if o.decision == choice]
         if option_index is not None:
             if option_index not in candidates:
@@ -163,21 +170,24 @@ class Engine:
         if plan.status == "APPROVED":
             plan.status = "DRAFT"
             plan.approval = None
-        save_plan(self.store, plan)
-        self.store.history_append({"event": "DECISION", "plan_id": plan_id, "item_id": item_id, "choice": choice,
-                                   "option": idx, "by": actor, "reason": reason.strip()})
-        return {"item_id": item_id, "choice": choice, "option_index": idx}
+        return {"item_id": item_id, "choice": choice, "option_index": idx,
+                "_event": {"event": "DECISION", "plan_id": plan.plan_id, "item_id": item_id, "choice": choice,
+                           "option": idx, "by": actor, "reason": reason.strip()}}
 
     def bulk_decide(self, plan_id: str, classification: str, choice: str, reason: str, actor: str) -> int:
+        """Decide every undecided item of a class in one pass (one load, one save)."""
         plan = load_plan(self.store, plan_id)
-        count = 0
+        events = []
         for item in plan.review_items:
             if item.decision is None and item.classification.value == classification:
                 options = [i for i, o in enumerate(item.options) if o.decision == choice]
                 if len(options) == 1:
-                    self.decide(plan_id, item.item_id, choice, reason, actor, options[0])
-                    count += 1
-        return count
+                    events.append(self._decide_in(plan, item.item_id, choice, reason, actor, options[0])["_event"])
+        if events:
+            save_plan(self.store, plan)
+            for event in events:
+                self.store.history_append(event)
+        return len(events)
 
     def approve(self, plan_id: str, actor: str, note: str | None = None) -> Plan:
         plan = load_plan(self.store, plan_id)

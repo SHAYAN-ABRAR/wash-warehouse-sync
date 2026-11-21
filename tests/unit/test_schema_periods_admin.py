@@ -1,12 +1,18 @@
 """Survey periods, column naming/placement, well types and administrative aliases."""
 
 import pytest
-
 from wash_sync.adapters.base import normalize_well_type, parse_survey_period
 from wash_sync.admin import DEFAULT_ALIASES, AdminResolver, AliasTable
-from wash_sync.text import norm_key
-from wash_sync.schema import Period, WarehouseSchema, col_index, col_letter, final_column_order, parse_period_column
+from wash_sync.schema import (
+    Period,
+    WarehouseSchema,
+    col_index,
+    col_letter,
+    final_column_order,
+    parse_period_column,
+)
 from wash_sync.synthetic import WAREHOUSE_HEADERS
+from wash_sync.text import norm_key
 
 
 @pytest.mark.parametrize("label,period", [

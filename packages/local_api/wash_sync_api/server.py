@@ -26,7 +26,6 @@ from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Reques
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
-
 from wash_sync import SCHEMA_VERSION, __version__
 from wash_sync.adapters.base import detect_source
 from wash_sync.apply import load_plan
@@ -468,7 +467,6 @@ npm --prefix apps/web run build:local</code></pre>
 
 def run(host: str = "127.0.0.1", port: int = 8765, state_dir: str | None = None, open_browser: bool = True) -> None:
     import uvicorn  # noqa: PLC0415
-
     from wash_sync.config import default_state_dir  # noqa: PLC0415
 
     state = state_dir or default_state_dir()

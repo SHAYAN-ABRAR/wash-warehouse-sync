@@ -108,7 +108,7 @@ class WarehouseIndex:
     @classmethod
     def build(cls, workbook_path: str, db_path: str, sha256: str | None = None,
               progress: Callable[[float], None] | None = None,
-              cancelled: Callable[[], bool] | None = None) -> "WarehouseIndex":
+              cancelled: Callable[[], bool] | None = None) -> WarehouseIndex:
         sha256 = sha256 or file_sha256(workbook_path)
         tmp = db_path + ".building"
         if os.path.exists(tmp):
@@ -288,7 +288,7 @@ class WarehouseIndex:
     @classmethod
     def open_or_build(cls, workbook_path: str, cache_dir: str, sha256: str | None = None,
                       progress: Callable[[float], None] | None = None,
-                      cancelled: Callable[[], bool] | None = None) -> "WarehouseIndex":
+                      cancelled: Callable[[], bool] | None = None) -> WarehouseIndex:
         os.makedirs(cache_dir, exist_ok=True)
         sha256 = sha256 or file_sha256(workbook_path)
         db_path = os.path.join(cache_dir, f"{sha256[:24]}.v{INDEX_FORMAT}.sqlite")

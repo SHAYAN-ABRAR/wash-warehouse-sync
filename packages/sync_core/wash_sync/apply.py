@@ -41,16 +41,48 @@ class ApplyError(RuntimeError):
     pass
 
 
+def _state_path(store: StateStore, plan_id: str) -> str:
+    return store.plan_path(plan_id)[: -len(".json")] + ".state.json"
+
+
 def load_plan(store: StateStore, plan_id: str) -> Plan:
+    """Load a plan: the immutable preview document plus its small mutable sidecar.
+
+    Large plans (tens of MB) are written once at preview time; status, approval and
+    review decisions live in ``<plan>.state.json`` so recording a decision never
+    rewrites the whole plan.
+    """
     path = store.plan_path(plan_id)
     if not os.path.exists(path):
         raise ApplyError(f"Plan {plan_id} not found")
     with open(path, encoding="utf-8") as fh:
-        return Plan.model_validate(json.load(fh))
+        data = json.load(fh)
+    side = _state_path(store, plan_id)
+    if os.path.exists(side):
+        with open(side, encoding="utf-8") as fh:
+            state = json.load(fh)
+        for key in ("status", "approval", "applied_version"):
+            if key in state:
+                data[key] = state[key]
+        decisions = state.get("decisions", {})
+        for item in data.get("review_items", []):
+            if item["item_id"] in decisions:
+                item["decision"] = decisions[item["item_id"]]
+    return Plan.model_validate(data)
 
 
-def save_plan(store: StateStore, plan: Plan) -> None:
-    atomic_write_json(store.plan_path(plan.plan_id), json.loads(plan.model_dump_json()))
+def save_plan(store: StateStore, plan: Plan, full: bool = False) -> None:
+    """Persist plan state. Only the sidecar is rewritten unless ``full`` is requested."""
+    path = store.plan_path(plan.plan_id)
+    if full or not os.path.exists(path):
+        atomic_write_json(path, json.loads(plan.model_dump_json()))
+    state = {
+        "status": plan.status,
+        "approval": plan.approval.model_dump() if plan.approval else None,
+        "applied_version": plan.applied_version,
+        "decisions": {i.item_id: i.decision.model_dump() for i in plan.review_items if i.decision is not None},
+    }
+    atomic_write_json(_state_path(store, plan.plan_id), state)
 
 
 class _Collected:

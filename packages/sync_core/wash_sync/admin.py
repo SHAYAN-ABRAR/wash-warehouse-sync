@@ -8,8 +8,9 @@ mappings learned from rows that already exist in the verified warehouse.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 from .text import clean, has_bangla, norm_key
 
@@ -41,7 +42,7 @@ class AliasTable:
     by_level: dict[str, dict[str, str]] = field(default_factory=dict)
 
     @classmethod
-    def from_config(cls, groups: Iterable[dict[str, Any]]) -> "AliasTable":
+    def from_config(cls, groups: Iterable[dict[str, Any]]) -> AliasTable:
         table = cls()
         for group in groups:
             names = [norm_key(n) for n in group.get("names", []) if norm_key(n)]
