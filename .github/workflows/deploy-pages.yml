@@ -37,6 +37,7 @@ jobs:
       - name: Refuse to publish anything but the static build and synthetic demo data
         run: |
           test -f dist/index.html && test -f dist/404.html
+          test -f dist/conflicts.html && test -f dist/docs/architecture/index.html
           test -f dist/demo/manifest.json
           grep -q '"synthetic":true' dist/demo/manifest.json
           if find dist -type f \( -name '*.sqlite' -o -name '*.psql' -o -name '*.zip' \) | grep -q .; then

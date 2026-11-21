@@ -8,9 +8,13 @@ dispatch:
 1. checkout, Node 22, `npm ci` (lockfile);
 2. frontend tests (`npm test`);
 3. `npm run build:pages` — type-check and build with `base=/wash-warehouse-sync/`;
-   `404.html` is a copy of `index.html` so deep links and refreshes work;
+   `scripts/postbuild.mjs` then writes a copy of `index.html` for every route the router
+   defines (`conflicts.html` and `conflicts/index.html`, the demo plans, the docs sections),
+   so direct visits and refreshes return HTTP 200, and `404.html` for everything else, which
+   renders the app's *Page not found* view with a genuine 404 status;
 4. a guard that refuses to publish anything except the static build and the synthetic
-   demo bundle (`demo/manifest.json` must declare `"synthetic": true`);
+   demo bundle (`demo/manifest.json` must declare `"synthetic": true`) and checks that the
+   route files exist;
 5. `actions/configure-pages`, `actions/upload-pages-artifact`, `actions/deploy-pages`
    with `contents: read`, `pages: write`, `id-token: write` and the `github-pages`
    environment.

@@ -208,7 +208,7 @@ Regenerate the synthetic demo bundle with the real engine: `wash-sync demo-data 
 
 ## Deployment
 
-`.github/workflows/deploy-pages.yml` builds, tests and deploys `apps/web/dist` to GitHub Pages on every push to `main` (or manually) using `configure-pages`, `upload-pages-artifact` and `deploy-pages` with `pages: write` and `id-token: write`. The Vite base is `/wash-warehouse-sync/`; `404.html` serves deep links. Details: [docs/deployment.md](docs/deployment.md) · troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md).
+`.github/workflows/deploy-pages.yml` builds, tests and deploys `apps/web/dist` to GitHub Pages on every push to `main` (or manually) using `configure-pages`, `upload-pages-artifact` and `deploy-pages` with `pages: write` and `id-token: write`. The Vite base is `/wash-warehouse-sync/`; every app route is written as a static copy of `index.html`, so direct visits and refreshes return 200, while unknown paths get `404.html` (the app's *Page not found* view). Details: [docs/deployment.md](docs/deployment.md) · troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## Project structure
 
