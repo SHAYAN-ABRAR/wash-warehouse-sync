@@ -1,0 +1,153 @@
+{
+  "warehouse_name": "WASH_Warehouse",
+  "source_dirs": {
+    "AQUAWATCH": "~/wash_exports/aquawatch",
+    "GPANI": "~/wash_exports/gpani",
+    "WPMS": "~/wash_exports/wpms",
+    "BORELOG": "~/wash_exports/borelog"
+  },
+  "export_dir": null,
+  "validation": {
+    "mode": "standard",
+    "strict_escalations": [
+      "GPS_INVALID",
+      "MISSING_TUBEWELL_TYPE",
+      "DEPTH_UNPARSEABLE",
+      "SUSPICIOUS_WATER_TABLE",
+      "ARSENIC_IMPLAUSIBLE",
+      "IRON_IMPLAUSIBLE",
+      "CHLORIDE_IMPLAUSIBLE",
+      "NEGATIVE_MEASUREMENT",
+      "UNREASONABLE_DEPTH",
+      "CONFLICTING_DEPTH",
+      "MISSING_ADMIN",
+      "ADMIN_NAME_UNMAPPED",
+      "WATER_TABLE_NON_NUMERIC",
+      "SURVEY_PERIOD_PROBLEM"
+    ],
+    "completeness": {
+      "AQUAWATCH": [
+        "water_table",
+        "well_type",
+        "latitude"
+      ],
+      "GPANI": [
+        "latitude",
+        "facility_type"
+      ],
+      "WPMS": [
+        "latitude",
+        "facility_type",
+        "total_depth"
+      ],
+      "BORELOG": [
+        "latitude",
+        "tw_type",
+        "well_depth"
+      ]
+    },
+    "min_survey_year": 2018
+  },
+  "matching": {
+    "possible_match_radius_m": 30.0,
+    "exact_coincidence_m": 1.0,
+    "verify_gps_max_m": 100.0,
+    "depth_tolerance_ratio": 0.1,
+    "depth_tolerance_abs_m": 6.0,
+    "auto_apply_verified_cross_source": true
+  },
+  "admin_aliases": [
+    {
+      "level": "any",
+      "names": [
+        "CHITTAGONG",
+        "CHATTOGRAM"
+      ]
+    },
+    {
+      "level": "any",
+      "names": [
+        "BARISAL",
+        "BARISHAL"
+      ]
+    },
+    {
+      "level": "any",
+      "names": [
+        "BOGRA",
+        "BOGURA"
+      ]
+    },
+    {
+      "level": "any",
+      "names": [
+        "COMILLA",
+        "CUMILLA"
+      ]
+    },
+    {
+      "level": "any",
+      "names": [
+        "JESSORE",
+        "JASHORE"
+      ]
+    },
+    {
+      "level": "upazila",
+      "names": [
+        "DAKSHIN SURMA",
+        "DAKKHIN SURMA"
+      ]
+    },
+    {
+      "level": "district",
+      "names": [
+        "KISHOREGANJ",
+        "KISHOREGONJ"
+      ]
+    },
+    {
+      "level": "district",
+      "names": [
+        "MOULVIBAZAR",
+        "MAULVIBAZAR"
+      ]
+    },
+    {
+      "level": "district",
+      "names": [
+        "NETROKONA",
+        "NETRAKONA"
+      ]
+    },
+    {
+      "level": "district",
+      "names": [
+        "JHALOKATHI",
+        "JHALOKATI",
+        "JHALAKATHI"
+      ]
+    },
+    {
+      "level": "district",
+      "names": [
+        "CHAPAI NAWABGANJ",
+        "CHAPAINAWABGANJ"
+      ]
+    },
+    {
+      "level": "district",
+      "names": [
+        "BRAHMANBARIA",
+        "BRAHMANBARIYA"
+      ]
+    }
+  ],
+  "backup_retention": 0,
+  "compression_level": 6,
+  "private_storage": {
+    "enabled": false,
+    "destination": "~/OrganisationDrive/WASH/verified_versions",
+    "label": "Organisation private drive"
+  }
+}
