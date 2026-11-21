@@ -1,6 +1,6 @@
 import { chromium } from '@playwright/test'
 const out = process.argv[2]
-const base = 'http://localhost:4173/wash-warehouse-sync'
+const base = process.env.UI_BASE ?? 'http://localhost:4173/wash-warehouse-sync' // e.g. the live Pages URL
 const routes = ['/', '/sync/new', '/sync/preview', '/conflicts', '/inspect', '/explorer', '/quality', '/history', '/settings', '/docs', '/docs/architecture', '/nope']
 const browser = await chromium.launch({ channel: 'chrome' })
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })

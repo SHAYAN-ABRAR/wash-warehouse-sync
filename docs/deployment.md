@@ -22,6 +22,9 @@ dispatch:
 Repository setting: **Settings → Pages → Source: GitHub Actions** (the workflow can
 also be enabled with `gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow`).
 
+To check a deployment, run the end-to-end suite against it:
+`E2E_BASE_URL=https://shayan-abrar.github.io/wash-warehouse-sync/ npx playwright test` (in `apps/web`).
+
 The Pages build is compiled in demo mode and has no code path to a local engine.
 Regenerate the synthetic bundle with `wash-sync demo-data --out apps/web/public/demo`.
 

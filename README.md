@@ -150,7 +150,7 @@ Full rules: [docs/matching-rules.md](docs/matching-rules.md) · state and audit 
 |---|---|
 | Python unit + integration + local API (`pytest`) | 122 |
 | Web unit + component (`vitest`) | 24 |
-| End-to-end on the production Pages build (`playwright`, desktop + mobile) | 11 |
+| End-to-end on the production Pages build (`playwright`, desktop + mobile) — also run against the live site | 11 |
 
 The integration suite covers initial creation, new facilities, new annual and seasonal surveys, missing-value fills, conflicting measurements, geological profile updates, existing observations, idempotent reruns, rejected GPS-only matches, workbook integrity, preservation of unrelated cells, the single worksheet, recovery after an interrupted export and geographic row ordering.
 
@@ -202,6 +202,7 @@ npm test                                 # Vitest
 npm run build:pages                      # GitHub Pages build (demo mode)
 npm run build:local                      # local production build
 npx playwright install chromium && npx playwright test   # end-to-end
+E2E_BASE_URL=https://shayan-abrar.github.io/wash-warehouse-sync/ npx playwright test   # against the live site
 ```
 
 Regenerate the synthetic demo bundle with the real engine: `wash-sync demo-data --out apps/web/public/demo`.
