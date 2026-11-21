@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 33% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 194 86% 31%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 30% 95%;
+    --secondary-foreground: 222 47% 15%;
+    --muted: 210 30% 96%;
+    --muted-foreground: 215 16% 40%;
+    --accent: 186 60% 94%;
+    --accent-foreground: 194 86% 24%;
+    --destructive: 0 72% 46%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 160 70% 30%;
+    --success-foreground: 0 0% 100%;
+    --warning: 32 92% 40%;
+    --warning-foreground: 0 0% 100%;
+    --info: 210 85% 42%;
+    --info-foreground: 0 0% 100%;
+    --border: 214 25% 89%;
+    --input: 214 25% 86%;
+    --ring: 194 86% 38%;
+    --radius: 0.7rem;
+    --sidebar: 222 47% 9%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-muted: 217 25% 65%;
+  }
+
+  .dark {
+    --background: 222 47% 5%;
+    --foreground: 210 40% 96%;
+    --card: 222 40% 8%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 40% 9%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 190 80% 52%;
+    --primary-foreground: 222 47% 8%;
+    --secondary: 217 32% 15%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 217 33% 13%;
+    --muted-foreground: 215 20% 68%;
+    --accent: 192 50% 16%;
+    --accent-foreground: 188 80% 72%;
+    --destructive: 0 75% 60%;
+    --destructive-foreground: 222 47% 8%;
+    --success: 158 60% 48%;
+    --success-foreground: 222 47% 8%;
+    --warning: 38 92% 56%;
+    --warning-foreground: 222 47% 8%;
+    --info: 210 90% 64%;
+    --info-foreground: 222 47% 8%;
+    --border: 217 30% 17%;
+    --input: 217 30% 20%;
+    --ring: 190 80% 52%;
+    --sidebar: 222 50% 4%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-muted: 217 20% 60%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'cv11', 'ss01', 'tnum' 0;
+  }
+  /* Long identifiers (geocode keys, JSON column names) must never widen the page on phones. */
+  main {
+    overflow-wrap: anywhere;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+  ::selection {
+    @apply bg-primary/20;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .bg-grid {
+    background-image: linear-gradient(to right, hsl(var(--border) / 0.5) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border) / 0.5) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
