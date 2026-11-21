@@ -1,0 +1,68 @@
+// Drives the full Local Production Mode workflow through the real UI:
+// upload → dry run (job progress) → review decision → approve → apply → history.
+// Usage: wash-sync serve --state-dir <synthetic state> --port 8766 --no-open &
+//        node scripts/verify-local.mjs http://127.0.0.1:8766 ../../examples/sources/aquawatch_survey_2027_wet.xlsx
+import { chromium } from '@playwright/test'
+const [base = 'http://127.0.0.1:8766', file, shots] = process.argv.slice(2)
+const browser = await chromium.launch({ channel: process.env.PW_CHANNEL ?? 'chrome' })
+const page = await browser.newPage({ viewport: { width: 1440, height: 950 } })
+const errors = []
+page.on('pageerror', (e) => errors.push(e.message))
+page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+const step = (s) => console.log('✓', s)
+
+await page.goto(base + '/', { waitUntil: 'networkidle' })
+await page.getByText('Local production').first().waitFor()
+if (await page.getByText('Public demonstration.').count()) throw new Error('demo banner shown in local mode')
+step('local mode detected (no demo banner)')
+await page.getByLabel('Reviewer name').fill('Local Verifier')
+
+await page.goto(base + '/sync/new', { waitUntil: 'networkidle' })
+await page.setInputFiles('input[type=file]', file)
+await page.getByText('15/15 known columns matched').waitFor({ timeout: 30000 })
+step('upload + detection (AquaWatch, 15/15 columns)')
+await page.getByRole('button', { name: 'Run dry-run comparison' }).click()
+await page.waitForURL(/\/sync\/preview\/plan-/, { timeout: 120000 })
+await page.getByText('Classified records').waitFor()
+const planId = page.url().split('/').pop()
+step(`dry run completed → ${planId}`)
+if (shots) await page.screenshot({ path: `${shots}/local-preview.png` })
+
+await page.goto(`${base}/conflicts?plan=${planId}`, { waitUntil: 'networkidle' })
+await page.getByRole('button', { name: /nearby compatible/ }).first().click()
+const panel = page.locator('fieldset').first().locator('..')
+await panel.getByLabel(/Reason/).fill('Verified in the field: separate tubewell')
+await panel.getByRole('button', { name: 'Record decision' }).click()
+await page.getByText(/Decision recorded/).waitFor()
+step('review decision recorded with reason')
+
+await page.goto(`${base}/sync/preview/${planId}`, { waitUntil: 'networkidle' })
+await page.getByRole('button', { name: 'Approve plan' }).click()
+await page.getByRole('dialog').getByRole('button', { name: 'Approve plan' }).click()
+await page.getByText(/Plan approved/).waitFor()
+step('plan approved')
+await page.getByRole('button', { name: 'Apply plan' }).click()
+await page.getByRole('dialog').getByRole('button', { name: 'Apply and publish' }).click()
+await page.getByText(/Published version v001/).waitFor({ timeout: 300000 })
+step('applied: v001 published (write → verify → publish)')
+
+await page.goto(`${base}/history`, { waitUntil: 'networkidle' })
+await page.getByText('v001').first().waitFor()
+step('history shows v001')
+// A real click on the plain link: no custom headers, exactly like a user.
+const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Download workbook' }).first().click()])
+const saved = await download.path()
+const { readFileSync } = await import('node:fs')
+if (download.suggestedFilename() !== 'WASH_Warehouse_v001.xlsx' || readFileSync(saved).subarray(0, 2).toString() !== 'PK') throw new Error('download failed')
+step(`clicking "Download workbook" saved ${download.suggestedFilename()} (valid XLSX)`)
+await page.goto(`${base}/sync/preview/${planId}`, { waitUntil: 'networkidle' })
+const [audit] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: /Cell-level changes/ }).first().click()])
+if (!readFileSync(await audit.path(), 'utf-8').includes('field_change') && !readFileSync(await audit.path(), 'utf-8').includes('new_value')) throw new Error('audit download failed')
+step(`clicking an audit link saved ${audit.suggestedFilename()}`)
+await page.goto(`${base}/explorer`, { waitUntil: 'networkidle' })
+await page.getByLabel('Search the warehouse').fill('syn-w0000')
+await page.locator('tbody tr[data-index]', { hasText: 'SYN-W0000' }).first().waitFor({ timeout: 60000 })
+step('explorer finds the new facility in v001')
+if (shots) await page.screenshot({ path: `${shots}/local-explorer.png` })
+await browser.close()
+console.log(errors.length ? `console errors: ${errors.join(' | ')}` : 'no console errors')

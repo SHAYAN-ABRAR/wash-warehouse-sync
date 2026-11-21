@@ -37,6 +37,7 @@ from wash_sync.planner import PreviewInput
 from .jobs import JobManager
 
 MAX_UPLOAD_BYTES = 400 * 1024 * 1024
+COOKIE_NAME = "wash_sync_session"
 ALLOWED_UPLOAD_EXT = (".xlsx", ".xlsm", ".xls", ".csv")
 AUDIT_DOWNLOADS = {f"{name}.csv" for name in AUDIT_FILES} | {"sync_summary.json", "report.html"}
 
@@ -104,9 +105,16 @@ def create_app(state_dir: str, static_dir: Path | None = None, token: str | None
     app.state.engine = engine
     app.state.jobs = jobs
 
-    def require_token(x_wash_sync_token: str | None = Header(default=None)) -> None:
-        if not x_wash_sync_token or not secrets.compare_digest(x_wash_sync_token, session_token):
-            raise HTTPException(status_code=401, detail="Missing or invalid session token. Reload the local app.")
+    def require_token(request: Request, x_wash_sync_token: str | None = Header(default=None)) -> None:
+        if x_wash_sync_token and secrets.compare_digest(x_wash_sync_token, session_token):
+            return
+        # Plain links (workbook / audit downloads) cannot send headers. A SameSite=Strict,
+        # HttpOnly cookie set by the served page is accepted for read-only GET requests;
+        # every state-changing request still requires the header.
+        cookie = request.cookies.get(COOKIE_NAME)
+        if request.method == "GET" and cookie and secrets.compare_digest(cookie, session_token):
+            return
+        raise HTTPException(status_code=401, detail="Missing or invalid session token. Reload the local app.")
 
     def actor(x_wash_sync_user: str | None = Header(default=None)) -> str:
         name = (x_wash_sync_user or "").strip()
@@ -433,13 +441,17 @@ def create_app(state_dir: str, static_dir: Path | None = None, token: str | None
 
     # ---------------------------------------------------------------- web app
     static = static_dir if static_dir is not None else default_static_dir()
+    if static is not None and not (static / "index.html").exists():
+        static = None  # engine runs; the page explains how to build the interface
 
     def index_html() -> HTMLResponse:
         if static is None:
             return HTMLResponse(_MISSING_UI.replace("{version}", __version__), status_code=200)
         html = (static / "index.html").read_text(encoding="utf-8")
         meta = f'<meta name="wash-sync-token" content="{session_token}"><meta name="wash-sync-mode" content="local">'
-        return HTMLResponse(html.replace("<head>", "<head>" + meta, 1), headers={"Cache-Control": "no-store"})
+        response = HTMLResponse(html.replace("<head>", "<head>" + meta, 1), headers={"Cache-Control": "no-store"})
+        response.set_cookie(COOKIE_NAME, session_token, httponly=True, samesite="strict", path="/")
+        return response
 
     @app.get("/{path:path}", include_in_schema=False)
     def spa(path: str) -> Response:

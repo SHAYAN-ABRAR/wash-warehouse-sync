@@ -100,6 +100,22 @@ def test_upload_rejects_unsupported_types(client):
     assert r.status_code == 400
 
 
-def test_spa_fallback_without_build(client):
-    r = client.get("/conflicts")
-    assert r.status_code == 200 and "local engine is running" in r.text
+def test_spa_fallback_without_build(engine, tmp_path):
+    app = create_app(engine.settings.state_dir, static_dir=tmp_path / "no-build", token=TOKEN)
+    with TestClient(app) as client:
+        r = client.get("/conflicts")
+        assert r.status_code == 200 and "local engine is running" in r.text
+
+
+def test_download_links_work_with_the_page_cookie_but_mutations_need_the_header(engine, tmp_path):
+    static = tmp_path / "web"
+    static.mkdir()
+    (static / "index.html").write_text("<html><head><title>x</title></head><body></body></html>")
+    app = create_app(engine.settings.state_dir, static_dir=static, token=TOKEN)
+    with TestClient(app) as c:
+        page = c.get("/")
+        assert 'name="wash-sync-mode" content="local"' in page.text
+        assert c.cookies.get("wash_sync_session") == TOKEN  # set by serving the app (HttpOnly, SameSite=Strict)
+        assert c.get("/api/v1/versions/0/download").status_code == 200  # plain link: cookie only
+        r = c.post("/api/v1/plans/x/approve", json={})
+        assert r.status_code == 401  # state changes still require the header
