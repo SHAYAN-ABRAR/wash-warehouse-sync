@@ -65,8 +65,28 @@ class StateLockedError(RuntimeError):
 
 
 def _pid_alive(pid: int) -> bool:
+    """Whether a process exists. Never sends a signal on Windows.
+
+    ``os.kill(pid, 0)`` is a harmless probe on POSIX but *terminates* the process on
+    Windows, so Windows uses OpenProcess/GetExitCodeProcess instead.
+    """
     if pid <= 0:
         return False
+    if os.name == "nt":
+        import ctypes  # noqa: PLC0415
+        from ctypes import wintypes  # noqa: PLC0415
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return ctypes.get_last_error() == 5  # access denied: the process exists
+        try:
+            code = wintypes.DWORD()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return True
+            return code.value == 259  # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -86,7 +106,7 @@ class StateStore:
     def p(self, *parts: str) -> str:
         return os.path.join(self.root, *parts)
 
-    def ensure(self) -> "StateStore":
+    def ensure(self) -> StateStore:
         for sub in ("versions", "plans", "runs", "index", "jobs", "uploads", "tmp"):
             os.makedirs(self.p(sub), exist_ok=True)
         if not os.path.exists(self.p("manifest.json")):
