@@ -21,8 +21,8 @@ import type {
 export class DemoUnavailableError extends Error {
   constructor(action: string) {
     super(
-      `${action} runs only in Local Production Mode. The public demo never executes the engine or contacts a computer — ` +
-        'run `wash-sync serve` on the machine that holds the private warehouse.',
+      `${action} runs only in Local Production Mode — the app running on your own computer. This sample-data website never ` +
+        'runs the engine or contacts your computer; Documentation → Getting started shows the one command that starts it.',
     )
     this.name = 'DemoUnavailableError'
   }
@@ -78,7 +78,8 @@ export interface SchemaResponse {
 export interface DataProvider {
   mode: Mode
   status(): Promise<StatusResponse>
-  init(warehousePath: string): Promise<Job>
+  /** Make a warehouse workbook the current version (the baseline when none is registered). */
+  loadWarehouse(file: File, reason?: string): Promise<Job>
   history(): Promise<HistoryResponse>
   pending(): Promise<Record<string, unknown>[]>
   plans(): Promise<PlanListItem[]>
@@ -132,7 +133,7 @@ class LocalProvider implements DataProvider {
     const headers: Record<string, string> = { 'X-Wash-Sync-Token': this.token, ...(init.headers as Record<string, string>) }
     const reviewer = reviewerName()
     if (reviewer) headers['X-Wash-Sync-User'] = reviewer
-    if (init.body && !(init.body instanceof FormData)) headers['Content-Type'] = 'application/json'
+    if (typeof init.body === 'string') headers['Content-Type'] = 'application/json'
     const res = await fetch(`/api/v1${path}`, { ...init, headers, credentials: 'same-origin' })
     if (!res.ok) {
       let detail = res.statusText
@@ -158,8 +159,12 @@ class LocalProvider implements DataProvider {
   }
 
   status = () => this.req<StatusResponse>('/status')
-  init = (warehousePath: string) =>
-    this.req<Job>('/init', { method: 'POST', body: JSON.stringify({ warehouse_path: warehousePath }) })
+  loadWarehouse = (file: File, reason?: string) =>
+    this.req<Job>(`/warehouse/load${this.qs({ file_name: file.name, reason })}`, {
+      method: 'POST',
+      body: file,
+      headers: { 'Content-Type': 'application/octet-stream' },
+    })
   history = () => this.req<HistoryResponse>('/versions')
   pending = () => this.req<Record<string, unknown>[]>('/pending')
   plans = () => this.req<PlanListItem[]>('/plans')
@@ -243,8 +248,8 @@ class DemoProvider implements DataProvider {
   }
 
   status = () => this.get<StatusResponse>('status.json')
-  async init(): Promise<Job> {
-    throw new DemoUnavailableError('Registering a warehouse')
+  async loadWarehouse(): Promise<Job> {
+    throw new DemoUnavailableError('Loading your own warehouse')
   }
   history = () => this.get<HistoryResponse>('versions.json')
   pending = () => this.get<Record<string, unknown>[]>('pending.json')
@@ -412,6 +417,16 @@ export function createProvider(mode: Mode = detectMode()): DataProvider {
 export const DataContext = createContext<DataProvider>(createProvider('demo'))
 export const useData = () => useContext(DataContext)
 
+/**
+ * App-wide data revision. Bumping it (after a warehouse is loaded, a plan is applied or a version
+ * is restored) makes every mounted page reload its data, so all views show the current warehouse.
+ */
+export const RevisionContext = createContext<{ revision: number; refreshAll: () => void }>({ revision: 0, refreshAll: () => {} })
+export const useRefreshAll = () => useContext(RevisionContext).refreshAll
+
+/** True for the local server's "still preparing the warehouse index" answer (HTTP 503). */
+export const isPreparing = (e: unknown): boolean => e instanceof ApiError && e.status === 503
+
 // ---------------------------------------------------------------------------- tiny async-state hook
 
 export interface Resource<T> {
@@ -424,20 +439,28 @@ export interface Resource<T> {
 export function useResource<T>(fn: () => Promise<T>, deps: unknown[]): Resource<T> {
   const [state, setState] = useState<{ data?: T; error?: Error; loading: boolean }>({ loading: true })
   const [tick, setTick] = useState(0)
+  const { revision } = useContext(RevisionContext)
   const fnRef = useRef(fn)
   fnRef.current = fn
   useEffect(() => {
     let alive = true
+    let retry: ReturnType<typeof setTimeout> | undefined
     setState((s) => ({ ...s, loading: true, error: undefined }))
     fnRef
       .current()
       .then((data) => alive && setState({ data, loading: false }))
-      .catch((error: Error) => alive && setState({ error, loading: false }))
+      .catch((error: Error) => {
+        if (!alive) return
+        setState((s) => ({ data: s.data, error, loading: false }))
+        // The server is still preparing the warehouse for search: try again shortly.
+        if (isPreparing(error)) retry = setTimeout(() => alive && setTick((t) => t + 1), 3000)
+      })
     return () => {
       alive = false
+      clearTimeout(retry)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, tick])
+  }, [...deps, tick, revision])
   const reload = useCallback(() => setTick((t) => t + 1), [])
   return { data: state.data, error: state.error, loading: state.loading, reload }
 }

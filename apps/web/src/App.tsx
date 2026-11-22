@@ -4,7 +4,7 @@ import { Toaster } from 'sonner'
 import { AppShell } from '@/components/layout/AppShell'
 import { TooltipProvider } from '@/components/ui/primitives'
 import { LoadingBlock } from '@/components/common'
-import { DataContext, createProvider, type DataProvider } from '@/lib/api'
+import { DataContext, RevisionContext, createProvider, type DataProvider } from '@/lib/api'
 import { routerBasename } from '@/lib/runtime'
 import Dashboard from '@/pages/Dashboard'
 
@@ -41,18 +41,27 @@ export function AppRoutes() {
   )
 }
 
+/** Lets any page ask every page to reload its data (after a warehouse load, apply or rollback). */
+export function RevisionProvider({ children }: { children: React.ReactNode }) {
+  const [revision, setRevision] = React.useState(0)
+  const value = React.useMemo(() => ({ revision, refreshAll: () => setRevision((r) => r + 1) }), [revision])
+  return <RevisionContext.Provider value={value}>{children}</RevisionContext.Provider>
+}
+
 export default function App({ provider }: { provider?: DataProvider }) {
   const value = React.useMemo(() => provider ?? createProvider(), [provider])
   return (
     <DataContext.Provider value={value}>
-      <TooltipProvider>
-        <BrowserRouter basename={routerBasename()}>
-          <AppShell>
-            <AppRoutes />
-          </AppShell>
-        </BrowserRouter>
-        <Toaster richColors position="bottom-right" closeButton />
-      </TooltipProvider>
+      <RevisionProvider>
+        <TooltipProvider>
+          <BrowserRouter basename={routerBasename()}>
+            <AppShell>
+              <AppRoutes />
+            </AppShell>
+          </BrowserRouter>
+          <Toaster richColors position="bottom-right" closeButton />
+        </TooltipProvider>
+      </RevisionProvider>
     </DataContext.Provider>
   )
 }

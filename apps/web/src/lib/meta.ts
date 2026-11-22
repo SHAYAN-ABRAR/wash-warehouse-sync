@@ -147,6 +147,15 @@ export const SOURCE_META: Record<Source, { label: string; long: string; color: s
   BORELOG: { label: 'Bore Log', long: 'Bore-log engineering records', color: 'hsl(160 55% 38%)' },
 }
 
+/** How a warehouse version came to be. */
+export const VERSION_KIND_META: Record<string, { label: string; tone: Tone }> = {
+  BASELINE: { label: 'Baseline', tone: 'violet' },
+  SYNC: { label: 'Synchronized', tone: 'info' },
+  LOADED: { label: 'Loaded from file', tone: 'teal' },
+}
+
+export const versionLabel = (n: number | null | undefined) => (n === null || n === undefined ? '—' : `v${String(n).padStart(3, '0')}`)
+
 export const DECISION_META: Record<Decision, { label: string; tone: Tone }> = {
   APPROVE_MATCH: { label: 'Approve match', tone: 'info' },
   KEEP_SEPARATE: { label: 'Keep separate', tone: 'success' },

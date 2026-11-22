@@ -206,7 +206,8 @@ export interface VersionRecord {
   size: number
   created_at: string
   previous_version: number | null
-  kind: 'BASELINE' | 'SYNC'
+  kind: 'BASELINE' | 'SYNC' | 'LOADED'
+  reason?: string | null
   plan_id?: string
   rows: number
   columns: number
@@ -240,6 +241,8 @@ export interface StatusResponse {
   pending_conflicts: number
   active_job?: Job | null
   state_dir?: string
+  /** Whether the current version is ready for search (local mode). */
+  index?: { ready: boolean; progress: number | null } | null
 }
 
 export interface Job {

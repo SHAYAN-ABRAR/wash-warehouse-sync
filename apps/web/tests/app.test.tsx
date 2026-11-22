@@ -2,11 +2,12 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
-import { AppRoutes } from '@/App'
+import { AppRoutes, RevisionProvider } from '@/App'
 import { AppShell } from '@/components/layout/AppShell'
 import { TooltipProvider } from '@/components/ui/primitives'
-import { DataContext, DemoUnavailableError, type DataProvider } from '@/lib/api'
-import type { Plan, PlanListItem, ReviewItem, StatusResponse, VersionRecord } from '@/lib/types'
+import { ErrorState } from '@/components/common'
+import { ApiError, DataContext, DemoUnavailableError, useResource, type DataProvider } from '@/lib/api'
+import type { Job, Plan, PlanListItem, ReviewItem, StatusResponse, VersionRecord } from '@/lib/types'
 
 const version: VersionRecord = {
   version: 1, file: 'WASH_Warehouse_v001.xlsx', sha256: 'a'.repeat(64), size: 1000, created_at: '2026-11-19T10:00:00+0600',
@@ -41,7 +42,7 @@ function fakeProvider(mode: 'demo' | 'local' = 'demo'): DataProvider {
   return {
     mode,
     status: async () => status,
-    init: none,
+    loadWarehouse: none,
     history: async () => ({ current_version: 1, versions: [version], events: status.recent_events }),
     pending: async () => [],
     plans: async () => [planList],
@@ -73,13 +74,15 @@ function fakeProvider(mode: 'demo' | 'local' = 'demo'): DataProvider {
 function renderAt(path: string, provider = fakeProvider()) {
   return render(
     <DataContext.Provider value={provider}>
-      <TooltipProvider>
-        <MemoryRouter initialEntries={[path]}>
-          <AppShell>
-            <AppRoutes />
-          </AppShell>
-        </MemoryRouter>
-      </TooltipProvider>
+      <RevisionProvider>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={[path]}>
+            <AppShell>
+              <AppRoutes />
+            </AppShell>
+          </MemoryRouter>
+        </TooltipProvider>
+      </RevisionProvider>
     </DataContext.Provider>,
   )
 }
@@ -90,14 +93,14 @@ describe('application shell', () => {
     expect(await screen.findByRole('heading', { name: 'Warehouse dashboard' })).toBeInTheDocument()
     expect(await screen.findByText('2,358')).toBeInTheDocument()
     expect(screen.getByText('v001')).toBeInTheDocument()
-    expect(screen.getByText(/Public demonstration/)).toBeInTheDocument()
+    expect(screen.getByText(/Sample-data website\./)).toBeInTheDocument()
     expect(screen.getAllByText(/Demo · synthetic data/).length).toBeGreaterThan(0)
   })
 
   it('shows a local-mode indicator without the demo banner', async () => {
     renderAt('/', fakeProvider('local'))
     expect(await screen.findByRole('heading', { name: 'Warehouse dashboard' })).toBeInTheDocument()
-    expect(screen.queryByText(/Public demonstration/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Sample-data website\./)).not.toBeInTheDocument()
     expect(screen.getAllByText('Local production').length).toBeGreaterThan(0)
   })
 
@@ -152,5 +155,69 @@ describe('missing backend messaging', () => {
     await user.click(await screen.findByRole('button', { name: /Apply plan/ }))
     expect(await screen.findByText(/runs only in Local Production Mode/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Apply and publish' })).not.toBeInTheDocument()
+  })
+})
+
+describe('loading the current warehouse (New Sync step 1)', () => {
+  it('shows the sample warehouse in the demo and explains where real loading happens', async () => {
+    renderAt('/sync/new')
+    expect(await screen.findByText('1 · Current warehouse')).toBeInTheDocument()
+    expect(await screen.findByText('Synthetic sample')).toBeInTheDocument()
+    expect(screen.getByText(/Your own warehouse is loaded in the app running on your computer/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'How to run it on your computer' })).toHaveAttribute('href', '/docs/getting-started')
+    expect(screen.getByText('2 · Files to sync')).toBeInTheDocument()
+  })
+
+  it('asks for the warehouse first, loads it and refreshes every view (local mode)', async () => {
+    const user = userEvent.setup()
+    const provider = fakeProvider('local')
+    const base = await provider.status()
+    let loaded = false
+    const status = vi.fn(async () => ({ ...base, initialized: loaded, current_version: loaded ? version : null }))
+    provider.status = status
+    provider.loadWarehouse = vi.fn(async () => ({ job_id: 'job-1', kind: 'load', status: 'running', phase: 'verify', fraction: 0, message: '' }) as Job)
+    provider.job = vi.fn(async () => {
+      loaded = true
+      return { job_id: 'job-1', kind: 'load', status: 'succeeded', phase: 'done', fraction: 1, message: 'Done', result: { ...version, imported_from: 'WASH.xlsx' } } as Job
+    })
+    renderAt('/sync/new', provider)
+    expect(await screen.findByText(/Load the current warehouse in step 1 first/)).toBeInTheDocument()
+    const file = new File(['PK'], 'WASH.xlsx')
+    await user.upload(screen.getByLabelText('Choose the warehouse workbook'), file)
+    await user.click(screen.getByRole('button', { name: 'Load warehouse' }))
+    await waitFor(() => expect(provider.loadWarehouse).toHaveBeenCalledWith(file, undefined))
+    expect(await screen.findByText('v001')).toBeInTheDocument() // every resource reloaded after the load
+    await waitFor(() => expect(screen.queryByText(/Load the current warehouse in step 1 first/)).not.toBeInTheDocument())
+    expect(status.mock.calls.length).toBeGreaterThan(1)
+  })
+
+  it('refuses a source export chosen as the warehouse before anything is sent', async () => {
+    const user = userEvent.setup({ applyAccept: false })
+    const provider = fakeProvider('local')
+    const base = await provider.status()
+    provider.status = async () => ({ ...base, initialized: false, current_version: null })
+    provider.loadWarehouse = vi.fn()
+    renderAt('/sync/new', provider)
+    await user.upload(await screen.findByLabelText('Choose the warehouse workbook'), new File(['a,b'], 'survey_2027.csv'))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Source exports belong in step 2/)
+    expect(provider.loadWarehouse).not.toHaveBeenCalled()
+  })
+})
+
+describe('data refresh', () => {
+  it('retries by itself while the local server prepares the warehouse for search', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let calls = 0
+    const fetchRows = () => (++calls === 1 ? Promise.reject(new ApiError(503, 'Preparing warehouse v000 for search (40%).')) : Promise.resolve('rows ready'))
+    function Probe() {
+      const r = useResource(fetchRows, [])
+      return <div>{r.data ?? (r.error ? <ErrorState error={r.error} /> : 'loading')}</div>
+    }
+    render(<Probe />)
+    expect(await screen.findByText('Preparing the warehouse')).toBeInTheDocument() // neutral, not an error
+    expect(screen.getByText(/for search \(40%\)/)).toBeInTheDocument()
+    await vi.advanceTimersByTimeAsync(3100)
+    expect(await screen.findByText('rows ready')).toBeInTheDocument()
+    vi.useRealTimers()
   })
 })

@@ -63,34 +63,51 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 function GettingStarted() {
   return (
     <div>
-      <H>First synchronization in seven steps</H>
-      <P>Production synchronization runs on the computer that holds the private warehouse. You need Python 3.12+, Node.js 20+ (to build the interface once) and the verified workbook.</P>
-      <ol className="mt-6 space-y-7">
-        <Step n={1} title="Install the engine">
-          <Code>{`git clone ${REPO_URL}.git
+      <H>Run it on your computer</H>
+      <P>
+        The sync engine runs on the computer that holds your warehouse, so the private file never goes to a website. You need Python 3.12+ and Node.js 20+
+        (used once to build the interface). One command installs everything on first use and opens the app in your browser:
+      </P>
+      <Code>{`git clone ${REPO_URL}.git
 cd wash-warehouse-sync
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\\Scripts\\activate
-pip install -e ".[server]"`}</Code>
+./scripts/start-local.sh          # Windows PowerShell: scripts\\start-local.ps1`}</Code>
+      <P>
+        The app opens at <code>http://127.0.0.1:8765</code>, which only this computer can reach. It looks like this website but works with your real files,
+        kept in a private state folder (choose it with <code>--state-dir</code>).
+      </P>
+      <H>Your first synchronization</H>
+      <ol className="mt-6 space-y-7">
+        <Step n={1} title="Load the current warehouse">
+          <p>
+            Open <em>New Sync</em> and, in step 1, choose your latest warehouse workbook. It is checked (single worksheet, structure, ranges), copied into the
+            private state folder and prepared for search — about 5 minutes for 600,000 rows. The original file is never changed. From then on every page —
+            Dashboard, Warehouse Explorer, Data Quality, Sync History — shows this warehouse.
+          </p>
         </Step>
-        <Step n={2} title="Build the local interface (once)">
-          <Code>{`npm --prefix apps/web ci
-npm --prefix apps/web run build:local`}</Code>
+        <Step n={2} title="Add the files to sync and run the dry run">
+          <p>
+            In step 2, drop the new GPANI, WPMS, AquaWatch or bore-log export(s). The source system, columns and survey period are detected from the header
+            row. The dry run compares every record with the warehouse: records already in it are recognized as unchanged, so nothing is added twice. The
+            warehouse itself is not modified.
+          </p>
         </Step>
-        <Step n={3} title="Register the verified warehouse as the baseline">
-          <p>The workbook is verified, copied into the private state directory as the immutable <code>v000</code> and indexed. The original file is never modified.</p>
-          <Code>{`wash-sync init --warehouse /path/to/WASH_..._QA_CORRECTED.xlsx`}</Code>
+        <Step n={3} title="Review what needs a decision">
+          <p>
+            Changed measurements, possible duplicates and identity conflicts wait in the <em>Conflicts Center</em> (or <em>Match Inspector</em>). Every decision
+            needs a reason.
+          </p>
         </Step>
-        <Step n={4} title="Start the app">
-          <Code>{`python -m wash_sync serve        # opens http://127.0.0.1:8765`}</Code>
+        <Step n={4} title="Approve and apply">
+          <p>
+            The engine writes a new workbook, verifies it, proves that every untouched cell was preserved and publishes it as the next version (for example{' '}
+            <code>WASH_Warehouse_v001.xlsx</code>). All pages refresh to show it; download it from <em>Sync History</em>.
+          </p>
         </Step>
-        <Step n={5} title="Run a dry run">
-          <p>Open <em>New Sync</em>, drop the latest export(s) and run the comparison. You get a plan and a complete audit; the warehouse is untouched.</p>
-        </Step>
-        <Step n={6} title="Review conflicts">
-          <p>Decide changed measurements, possible duplicates and identity conflicts in the <em>Conflicts Center</em> or <em>Match Inspector</em>. Every decision needs a reason.</p>
-        </Step>
-        <Step n={7} title="Approve and apply">
-          <p>Approve the plan and apply it. The engine writes a temporary workbook, verifies it, proves that every untouched cell was preserved and then publishes the next version (for example <code>WASH_Warehouse_v001.xlsx</code>). Download it from <em>Sync History</em>.</p>
+        <Step n={5} title="Next time">
+          <p>
+            The latest version is remembered, so go straight to step 2 with the new exports. If the warehouse was edited outside the app (for example QA
+            corrections in Excel), load that file in step 1 first: it becomes the next version and earlier versions stay available.
+          </p>
         </Step>
       </ol>
       <H>Glossary</H>
@@ -111,6 +128,7 @@ function Modes() {
     ['Browse documentation and architecture', true, true],
     ['Synthetic dashboards, plans, conflicts and audits (produced by the real engine)', true, false],
     ['Preview small CSV/XLSX files in the browser (simplified rules, nothing uploaded)', true, true],
+    ['Load your own current warehouse', false, true],
     ['Full dry run against the real warehouse', false, true],
     ['Record review decisions that affect the warehouse', false, true],
     ['Approve, apply, verify and publish new versions', false, true],
@@ -120,16 +138,17 @@ function Modes() {
   return (
     <div>
       <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] p-4 text-[15px] leading-relaxed">
-        <strong>The public GitHub Pages website is a demonstration and frontend distribution.</strong> Production synchronization of large private Excel
-        warehouses runs in the local processing environment (<code>wash-sync serve</code>).
+        <strong>This public website is the sample-data version of the app.</strong> It shows every screen with synthetic data and can preview small files in
+        your browser. Loading your real warehouse and synchronizing new files into it happens in the same app running on your computer (Local Production
+        Mode) — see <em>Getting started</em>. A public website cannot run the sync engine, and it should never receive a private warehouse.
       </div>
       <div className="mt-6 overflow-hidden rounded-xl border">
         <table className="w-full text-sm">
           <thead className="bg-muted text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-4 py-2.5 text-left">Capability</th>
-              <th className="px-4 py-2.5 text-center">GitHub Pages demo</th>
-              <th className="px-4 py-2.5 text-center">Local production</th>
+              <th className="px-4 py-2.5 text-center">This website (sample data)</th>
+              <th className="px-4 py-2.5 text-center">On your computer</th>
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -309,7 +328,7 @@ function Cli() {
   return (
     <div>
       <H>Commands</H>
-      <Code>{`wash-sync init --warehouse WAREHOUSE.xlsx          # register baseline v000 (verified copy)
+      <Code>{`wash-sync load-warehouse WAREHOUSE.xlsx [-r "why"]  # make it current (v000 first, later the next version)
 wash-sync inspect FILE...                           # detect source, format and column mapping
 wash-sync preview FILE... [--period "2027 dry"]     # dry run → plan + audit
 wash-sync review list PLAN_ID                       # review items and options

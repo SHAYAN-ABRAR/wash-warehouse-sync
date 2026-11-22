@@ -1,7 +1,8 @@
 import * as React from 'react'
-import { AlertCircle, Inbox, type LucideIcon } from 'lucide-react'
+import { AlertCircle, Inbox, Loader2, type LucideIcon } from 'lucide-react'
 import { Badge, Card, InfoTip, Skeleton } from '@/components/ui/primitives'
 import { Button } from '@/components/ui/button'
+import { isPreparing } from '@/lib/api'
 import { CLASS_META, SOURCE_META, TONE_CLASSES, type Tone } from '@/lib/meta'
 import type { ChangeClass, Source } from '@/lib/types'
 import { cn, fmtNum } from '@/lib/utils'
@@ -120,6 +121,16 @@ export function EmptyState({
 }
 
 export function ErrorState({ error, onRetry, title = 'Something went wrong' }: { error: Error; onRetry?: () => void; title?: string }) {
+  if (isPreparing(error))
+    return (
+      <div role="status" className="flex items-start gap-3 rounded-xl border border-primary/20 bg-accent/40 p-4 text-sm">
+        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">Preparing the warehouse</div>
+          <div className="mt-0.5 break-words text-muted-foreground">{error.message}</div>
+        </div>
+      </div>
+    )
   return (
     <div role="alert" className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />

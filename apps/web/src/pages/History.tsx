@@ -6,7 +6,8 @@ import { EmptyState, ErrorState, LoadingBlock, Mono, PageHeader, SourceBadge } f
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, Label, Textarea, Tooltip } from '@/components/ui/primitives'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { useData, useResource } from '@/lib/api'
+import { useData, useRefreshAll, useResource } from '@/lib/api'
+import { VERSION_KIND_META } from '@/lib/meta'
 import type { VersionRecord } from '@/lib/types'
 import { cn, fmtBytes, fmtDate, fmtNum } from '@/lib/utils'
 
@@ -26,6 +27,7 @@ const COUNT_LABELS: [string, string][] = [
 export default function History() {
   const api = useData()
   const history = useResource(() => api.history(), [api])
+  const refreshAll = useRefreshAll()
   const [rollbackTo, setRollbackTo] = React.useState<VersionRecord | null>(null)
   const [reason, setReason] = React.useState('')
 
@@ -36,7 +38,7 @@ export default function History() {
       toast.success(`Version v${String(rollbackTo.version).padStart(3, '0')} is current again`)
       setRollbackTo(null)
       setReason('')
-      history.reload()
+      refreshAll() // every page now shows the restored version
     } catch (e) {
       toast.error((e as Error).message)
     }
@@ -75,7 +77,7 @@ export default function History() {
                     <div className="space-y-1.5">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-lg font-semibold">v{String(v.version).padStart(3, '0')}</span>
-                        <Badge tone={v.kind === 'BASELINE' ? 'violet' : 'info'}>{v.kind === 'BASELINE' ? 'Baseline' : 'Synchronized'}</Badge>
+                        <Badge tone={VERSION_KIND_META[v.kind]?.tone ?? 'neutral'}>{VERSION_KIND_META[v.kind]?.label ?? v.kind}</Badge>
                         {isCurrent && (
                           <Badge tone="success" dot>
                             current
@@ -96,6 +98,12 @@ export default function History() {
                         {v.previous_version !== null && ` · from v${String(v.previous_version).padStart(3, '0')}`}
                         {v.applied_by && ` · by ${v.applied_by}`}
                       </CardDescription>
+                      {v.kind !== 'SYNC' && v.imported_from && (
+                        <p className="text-sm">
+                          Loaded from <span className="font-medium">{v.imported_from}</span>
+                          {v.reason && <span className="text-muted-foreground"> — “{v.reason}”</span>}
+                        </p>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {url ? (

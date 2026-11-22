@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import { toast } from 'sonner'
 import {
+  ArrowUp,
   CheckCircle2,
   Download,
   FileSpreadsheet,
@@ -15,28 +16,41 @@ import {
   Sparkles,
   Trash2,
   UploadCloud,
-  Wand2,
   X,
 } from 'lucide-react'
-import { ClassBadge, ErrorState, PageHeader, SourceBadge } from '@/components/common'
+import { ClassBadge, ErrorState, LoadingBlock, PageHeader, SourceBadge } from '@/components/common'
+import { CurrentWarehouse } from '@/components/CurrentWarehouse'
 import { DataTable } from '@/components/DataTable'
-import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Progress, Switch, Tooltip } from '@/components/ui/primitives'
+import {
+  Badge,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  NativeSelect,
+  Progress,
+  Switch,
+  Tooltip,
+} from '@/components/ui/primitives'
 import { Button } from '@/components/ui/button'
 import { useData, useJob, useResource } from '@/lib/api'
 import type { BrowserPreviewResult, BrowserRecord } from '@/lib/browserPreview'
-import { CLASS_ORDER, SOURCE_META } from '@/lib/meta'
+import { CLASS_ORDER } from '@/lib/meta'
 import { assetUrl } from '@/lib/runtime'
 import type { Detection, Source, UploadResult } from '@/lib/types'
 import { cn, downloadText, fmtBytes, fmtNum, periodLabel } from '@/lib/utils'
 
 type SourceChoice = 'AUTO' | Source
 
-const SOURCE_CARDS: { id: SourceChoice; title: string; text: string }[] = [
-  { id: 'AUTO', title: 'Auto-detect', text: 'Recognize the source system from the header row (recommended).' },
-  { id: 'AQUAWATCH', title: 'AquaWatch', text: 'Annual/seasonal survey exports and the historical GWC table.' },
-  { id: 'GPANI', title: 'GPANI', text: 'Grameen Pani tubewell and community-facility reports.' },
-  { id: 'WPMS', title: 'WPMS', text: 'Water Point Management System tubewell lists.' },
-  { id: 'BORELOG', title: 'Bore Log', text: 'Five-tab bore-log workbook linked by ID.' },
+const SOURCE_OPTIONS: { id: SourceChoice; title: string }[] = [
+  { id: 'AUTO', title: 'Auto-detect from the header row (recommended)' },
+  { id: 'AQUAWATCH', title: 'AquaWatch — annual/seasonal surveys, historical GWC table' },
+  { id: 'GPANI', title: 'GPANI — tubewell and community-facility reports' },
+  { id: 'WPMS', title: 'WPMS — tubewell lists' },
+  { id: 'BORELOG', title: 'Bore Log — five-tab workbook' },
 ]
 
 interface Staged {
@@ -87,6 +101,8 @@ function DetectionSummary({ det }: { det: Detection | BrowserPreviewResult['dete
 export default function NewSync() {
   const api = useData()
   const navigate = useNavigate()
+  const status = useResource(() => api.status(), [api])
+  const hasWarehouse = !!status.data?.current_version
   const [source, setSource] = React.useState<SourceChoice>('AUTO')
   const [period, setPeriod] = React.useState('')
   const [strict, setStrict] = React.useState(false)
@@ -170,17 +186,17 @@ export default function NewSync() {
 
   const ready = files.filter((f) => f.status === 'ready')
   const recognized = ready.filter((f) => (f.upload?.detection.source ?? f.browser?.detection.source) && !(f.upload?.detection.missing_required.length ?? f.browser?.detection.missingRequired.length))
-  const step = jobId ? 4 : ready.length ? 3 : 2
+  const step = !hasWarehouse ? 1 : jobId ? 4 : ready.length ? 3 : 2
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Synchronize"
         title="New synchronization"
-        description="Select the latest source export(s). Columns are matched by header name, the survey year/season is detected, and a dry run classifies every record — nothing is written until you approve."
+        description="Two inputs: the current warehouse (step 1) and the new files to sync (step 2). Every incoming record is compared with the warehouse — records already in it are recognized and skipped, so nothing is added twice. Nothing is written until you approve."
       />
       <ol className="grid grid-cols-1 gap-2 sm:grid-cols-4" aria-label="Steps">
-        {['Choose source', 'Add files', 'Check detection', 'Dry run'].map((label, i) => (
+        {['Current warehouse', 'Files to sync', 'Check detection', 'Dry run'].map((label, i) => (
           <li
             key={label}
             className={cn(
@@ -198,145 +214,145 @@ export default function NewSync() {
 
       <Card>
         <CardHeader>
-          <CardTitle>1 · Data source</CardTitle>
-          <CardDescription>Auto-detection works for every supported export; choose a system to restrict detection.</CardDescription>
+          <CardTitle>1 · Current warehouse</CardTitle>
+          <CardDescription>The warehouse that the new files are compared with. After it is loaded, every page — explorer, data quality, history — shows it.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div role="radiogroup" aria-label="Data source" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {SOURCE_CARDS.map((s) => (
-              <button
-                key={s.id}
-                role="radio"
-                aria-checked={source === s.id}
-                onClick={() => setSource(s.id)}
-                className={cn(
-                  'rounded-xl border p-4 text-left transition-all hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring',
-                  source === s.id && 'border-primary bg-accent/50 ring-1 ring-primary',
-                )}
-              >
-                <div className="flex items-center gap-2 font-medium">
-                  {s.id === 'AUTO' ? <Wand2 className="h-4 w-4 text-primary" /> : <span className="h-2.5 w-2.5 rounded-full" style={{ background: SOURCE_META[s.id as Source].color }} />}
-                  {s.title}
-                </div>
-                <p className="mt-1.5 text-xs text-muted-foreground">{s.text}</p>
-              </button>
-            ))}
-          </div>
-        </CardContent>
+        <CardContent>{status.loading && !status.data ? <LoadingBlock rows={2} /> : <CurrentWarehouse status={status.data} onStatusStale={status.reload} />}</CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>2 · Source export files</CardTitle>
+          <CardTitle>2 · Files to sync</CardTitle>
           <CardDescription>
+            The new GPANI, WPMS, AquaWatch or bore-log exports to bring into the warehouse.{' '}
             {api.mode === 'local'
-              ? 'Files are copied into the private state directory on this computer — never to an external service.'
-              : 'Demo mode: files are parsed entirely inside your browser (Web Worker) and never uploaded.'}
+              ? 'Files are copied into the private state folder on this computer — never to an external service.'
+              : 'On this demo website files are read entirely inside your browser and never uploaded.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div
-            onDragOver={(e) => {
-              e.preventDefault()
-              setDragging(true)
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault()
-              setDragging(false)
-              stage(e.dataTransfer.files)
-            }}
-            className={cn(
-              'relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-12 text-center transition-colors',
-              dragging ? 'border-primary bg-accent/50' : 'border-border bg-muted/20 hover:bg-muted/40',
-            )}
-          >
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-              <UploadCloud className="h-6 w-6 text-primary" />
+          {api.mode === 'local' && !hasWarehouse ? (
+            <div className="flex items-center gap-3 rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
+              <ArrowUp className="h-4 w-4 shrink-0" aria-hidden /> Load the current warehouse in step 1 first — new files are compared with it.
             </div>
-            <p className="font-medium">Drag & drop source exports here</p>
-            <p className="mt-1 text-sm text-muted-foreground">.xlsx, .xls or .csv {api.mode === 'demo' && '(browser preview: .xlsx and .csv)'}</p>
-            <Button className="mt-4" variant="outline" onClick={() => inputRef.current?.click()}>
-              Browse files
-            </Button>
-            <input
-              ref={inputRef}
-              type="file"
-              multiple
-              accept=".xlsx,.xlsm,.xls,.csv"
-              className="sr-only"
-              aria-label="Choose source files"
-              onChange={(e) => e.target.files && stage(e.target.files)}
-            />
-          </div>
-
-          {api.mode === 'demo' && samples.data && samples.data.length > 0 && (
-            <div className="rounded-xl border bg-muted/20 p-4">
-              <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-                <FlaskConical className="h-4 w-4 text-primary" /> Synthetic sample exports
+          ) : (
+            <>
+              <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+                <Label htmlFor="source-system" className="shrink-0">
+                  Source system
+                </Label>
+                <NativeSelect id="source-system" value={source} onChange={(e) => setSource(e.target.value as SourceChoice)} className="max-w-full sm:max-w-md">
+                  {SOURCE_OPTIONS.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.title}
+                    </option>
+                  ))}
+                </NativeSelect>
               </div>
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                {samples.data.map((s) => (
-                  <div key={s.file} className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">{s.title}</div>
-                      <div className="truncate text-xs text-muted-foreground">{s.description}</div>
-                    </div>
-                    <div className="flex shrink-0 gap-1">
-                      <Tooltip content="Download sample">
-                        <Button variant="ghost" size="icon" asChild>
-                          <a href={assetUrl(`demo/samples/${s.file}`)} download aria-label={`Download ${s.file}`}>
-                            <Download />
-                          </a>
-                        </Button>
-                      </Tooltip>
-                      <Button size="sm" variant="outline" onClick={() => trySample(s.file)} disabled={!/\.(csv|xlsx)$/i.test(s.file)}>
-                        Try it
-                      </Button>
-                    </div>
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setDragging(true)
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setDragging(false)
+                  stage(e.dataTransfer.files)
+                }}
+                className={cn(
+                  'relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-12 text-center transition-colors',
+                  dragging ? 'border-primary bg-accent/50' : 'border-border bg-muted/20 hover:bg-muted/40',
+                )}
+              >
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                  <UploadCloud className="h-6 w-6 text-primary" />
+                </div>
+                <p className="font-medium">Drag & drop source exports here</p>
+                <p className="mt-1 text-sm text-muted-foreground">.xlsx, .xls or .csv {api.mode === 'demo' && '(browser preview: .xlsx and .csv)'}</p>
+                <Button className="mt-4" variant="outline" onClick={() => inputRef.current?.click()}>
+                  Browse files
+                </Button>
+                <input
+                  ref={inputRef}
+                  type="file"
+                  multiple
+                  accept=".xlsx,.xlsm,.xls,.csv"
+                  className="sr-only"
+                  aria-label="Choose source files"
+                  onChange={(e) => e.target.files && stage(e.target.files)}
+                />
+              </div>
+
+              {api.mode === 'demo' && samples.data && samples.data.length > 0 && (
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+                    <FlaskConical className="h-4 w-4 text-primary" /> Synthetic sample exports
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {files.length > 0 && (
-            <ul className="space-y-3">
-              {files.map((f) => (
-                <li key={f.key} className="rounded-xl border p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <FileSpreadsheet className="h-5 w-5 shrink-0 text-muted-foreground" />
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">{f.file.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {fmtBytes(f.file.size)}
-                          {f.upload && ` · SHA-256 ${f.upload.sha256.slice(0, 12)}…`}
-                          {f.browser && ` · ${fmtNum(f.browser.totalRows)} data rows`}
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    {samples.data.map((s) => (
+                      <div key={s.file} className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">{s.title}</div>
+                          <div className="truncate text-xs text-muted-foreground">{s.description}</div>
+                        </div>
+                        <div className="flex shrink-0 gap-1">
+                          <Tooltip content="Download sample">
+                            <Button variant="ghost" size="icon" asChild>
+                              <a href={assetUrl(`demo/samples/${s.file}`)} download aria-label={`Download ${s.file}`}>
+                                <Download />
+                              </a>
+                            </Button>
+                          </Tooltip>
+                          <Button size="sm" variant="outline" onClick={() => trySample(s.file)} disabled={!/\.(csv|xlsx)$/i.test(s.file)}>
+                            Try it
+                          </Button>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {f.status === 'reading' && (
-                        <Badge tone="info">
-                          <Loader2 className="h-3 w-3 animate-spin" /> reading
-                        </Badge>
-                      )}
-                      <Button variant="ghost" size="icon" onClick={() => setFiles((fs) => fs.filter((x) => x.key !== f.key))} aria-label={`Remove ${f.file.name}`}>
-                        <Trash2 />
-                      </Button>
-                    </div>
+                    ))}
                   </div>
-                  {f.status === 'error' && <p className="mt-3 text-sm text-destructive">{f.error}</p>}
-                  {f.upload && (
-                    <div className="mt-3">
-                      <DetectionSummary det={f.upload.detection} />
-                    </div>
-                  )}
-                  {f.browser && <BrowserResult result={f.browser} />}
-                </li>
-              ))}
-            </ul>
+                </div>
+              )}
+
+              {files.length > 0 && (
+                <ul className="space-y-3">
+                  {files.map((f) => (
+                    <li key={f.key} className="rounded-xl border p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <FileSpreadsheet className="h-5 w-5 shrink-0 text-muted-foreground" />
+                          <div className="min-w-0">
+                            <div className="truncate font-medium">{f.file.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {fmtBytes(f.file.size)}
+                              {f.upload && ` · SHA-256 ${f.upload.sha256.slice(0, 12)}…`}
+                              {f.browser && ` · ${fmtNum(f.browser.totalRows)} data rows`}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {f.status === 'reading' && (
+                            <Badge tone="info">
+                              <Loader2 className="h-3 w-3 animate-spin" /> reading
+                            </Badge>
+                          )}
+                          <Button variant="ghost" size="icon" onClick={() => setFiles((fs) => fs.filter((x) => x.key !== f.key))} aria-label={`Remove ${f.file.name}`}>
+                            <Trash2 />
+                          </Button>
+                        </div>
+                      </div>
+                      {f.status === 'error' && <p className="mt-3 text-sm text-destructive">{f.error}</p>}
+                      {f.upload && (
+                        <div className="mt-3">
+                          <DetectionSummary det={f.upload.detection} />
+                        </div>
+                      )}
+                      {f.browser && <BrowserResult result={f.browser} />}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

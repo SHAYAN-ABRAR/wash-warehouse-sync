@@ -129,12 +129,12 @@ function ModeCard() {
     <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3.5 text-xs">
       <div className="flex items-center gap-2 font-semibold text-sidebar-foreground">
         <span className={cn('h-2 w-2 rounded-full', mode === 'local' ? 'bg-emerald-400 shadow-[0_0_8px] shadow-emerald-400' : 'bg-amber-400')} />
-        {mode === 'local' ? 'Local Production Mode' : 'GitHub Pages Demo Mode'}
+        {mode === 'local' ? 'Local Production Mode' : 'Sample-data website'}
       </div>
       <p className="mt-1.5 leading-relaxed text-sidebar-muted">
         {mode === 'local'
           ? 'Connected to the engine on this computer. Changes are written to new private versions only after approval.'
-          : 'Synthetic data only. The engine runs locally on the machine holding the private warehouse.'}
+          : 'Synthetic data only. Your real warehouse is loaded and synchronized in the app running on your computer.'}
       </p>
       <div className="mt-2 text-[11px] text-sidebar-muted/80">v{APP_VERSION}</div>
     </div>
@@ -190,9 +190,9 @@ function DemoBanner() {
   return (
     <div className="border-b border-amber-500/20 bg-amber-500/[0.08] px-4 py-2 text-center text-[13px] text-amber-800 dark:text-amber-200">
       <Sparkles className="mr-1.5 inline h-3.5 w-3.5 -translate-y-px" aria-hidden />
-      <strong className="font-semibold">Public demonstration.</strong> Every facility, identifier and measurement shown here is synthetic
-      and was processed by the real engine. Production synchronization of private warehouses runs locally —{' '}
-      <NavLink to="/docs" className="font-medium underline underline-offset-2">
+      <strong className="font-semibold">Sample-data website.</strong> Everything here is synthetic (processed by the real engine) so you can try every
+      step. To load your real warehouse and sync new files into it, run the same app on your computer —{' '}
+      <NavLink to="/docs/getting-started" className="font-medium underline underline-offset-2">
         how to run it
       </NavLink>
       .

@@ -12,7 +12,7 @@ test('dashboard loads under the Pages base path with assets and no console error
   const response = await page.goto('./')
   expect(response?.status()).toBe(200)
   await expect(page.getByRole('heading', { name: 'Warehouse dashboard' })).toBeVisible()
-  await expect(page.getByText('Public demonstration.')).toBeVisible()
+  await expect(page.getByText('Sample-data website.')).toBeVisible()
   await expect(page.getByText('Current warehouse version')).toBeVisible()
   const css = await page.evaluate(() => getComputedStyle(document.body).backgroundColor)
   expect(css).not.toBe('rgba(0, 0, 0, 0)') // Tailwind styles applied
@@ -67,6 +67,19 @@ test('sample export is previewed entirely in the browser', async ({ page }) => {
   await expect(page.getByText(/Possible duplicate/).first()).toBeVisible()
   await expect(page.getByText(/new columns/)).toBeVisible()
   expect(uploads).toEqual([]) // nothing is transmitted anywhere
+})
+
+test('new sync starts from the current warehouse, then the files to sync', async ({ page }) => {
+  await page.goto('sync/new')
+  const steps = page.getByRole('list', { name: 'Steps' })
+  await expect(steps.getByText('Current warehouse')).toBeVisible()
+  await expect(steps.getByText('Files to sync')).toBeVisible()
+  await expect(page.getByText('1 · Current warehouse')).toBeVisible()
+  await expect(page.getByText('Synthetic sample', { exact: true })).toBeVisible()
+  await expect(page.getByText('2 · Files to sync')).toBeVisible()
+  await page.getByRole('link', { name: 'How to run it on your computer' }).click()
+  await expect(page.getByRole('heading', { name: 'Run it on your computer' })).toBeVisible()
+  await expect(page.getByText('Load the current warehouse', { exact: true })).toBeVisible()
 })
 
 test('conflict decision is recorded with a reason (browser-only in demo)', async ({ page }) => {

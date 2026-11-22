@@ -10,7 +10,7 @@ import { CellChanges, EvidenceList, IssueList, MatchSummary, OperationSummary, S
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, InfoTip, Input, NativeSelect, Progress, Tooltip } from '@/components/ui/primitives'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Sheet } from '@/components/ui/dialog'
-import { DemoUnavailableError, useData, useJob, useResource } from '@/lib/api'
+import { DemoUnavailableError, useData, useJob, useRefreshAll, useResource } from '@/lib/api'
 import { CLASS_META, CLASS_ORDER, SOURCE_META, TONE_CLASSES } from '@/lib/meta'
 import type { ChangeClass, Plan, RecordResult, Source } from '@/lib/types'
 import { cn, fmtBytes, fmtDate, fmtNum, periodLabel } from '@/lib/utils'
@@ -53,11 +53,12 @@ export default function SyncPreview() {
   const [selected, setSelected] = React.useState<RecordResult | null>(null)
   const [confirm, setConfirm] = React.useState<'approve' | 'apply' | null>(null)
   const [jobId, setJobId] = React.useState<string | null>(null)
+  const refreshAll = useRefreshAll()
   const job = useJob(api, jobId, (j) => {
     if (j.status === 'succeeded') {
       const v = j.result?.new_version
       toast.success(v != null ? `Published version v${String(v).padStart(3, '0')}` : j.result?.message ?? 'Nothing to apply')
-      plan.reload()
+      refreshAll() // the plan, explorer, dashboard and history all show the new version
     } else toast.error(j.error ?? `Apply ${j.status}`)
   })
 

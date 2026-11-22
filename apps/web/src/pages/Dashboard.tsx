@@ -1,17 +1,19 @@
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from 'recharts'
 import { AlertTriangle, ArrowRight, CheckCircle2, Columns3, Database, FileStack, GitBranch, Scale, ShieldAlert, UploadCloud } from 'lucide-react'
 import { ClassBadge, EmptyState, ErrorState, LoadingBlock, PageHeader, StatCard } from '@/components/common'
-import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Progress } from '@/components/ui/primitives'
+import { CurrentWarehouse } from '@/components/CurrentWarehouse'
+import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/primitives'
 import { Button } from '@/components/ui/button'
-import { useData, useJob, useResource } from '@/lib/api'
-import { CLASS_META, CLASS_ORDER, SOURCE_META, TONE_CLASSES } from '@/lib/meta'
+import { useData, useResource } from '@/lib/api'
+import { CLASS_META, CLASS_ORDER, SOURCE_META, TONE_CLASSES, VERSION_KIND_META, versionLabel } from '@/lib/meta'
 import type { ChangeClass, HistoryEvent, Source } from '@/lib/types'
 import { fmtCompact, fmtDate, fmtNum, fmtRelative } from '@/lib/utils'
 
 const EVENT_LABEL: Record<string, string> = {
   INIT: 'Baseline registered',
+  LOAD_WAREHOUSE: 'Warehouse file loaded',
+  RETENTION: 'Old versions removed by retention',
   PREVIEW: 'Dry run completed',
   DECISION: 'Review decision recorded',
   APPROVE: 'Plan approved',
@@ -29,6 +31,7 @@ function eventDetail(e: HistoryEvent): string {
   if (e.event === 'APPLY') return `v${String(e.version).padStart(3, '0')} from v${String(e.previous_version).padStart(3, '0')}`
   if (e.event === 'DECISION') return `${e.item_id} → ${e.choice}`
   if (e.event === 'ROLLBACK') return `v${e.from_version} → v${e.to_version}`
+  if (e.event === 'LOAD_WAREHOUSE') return `${versionLabel(e.version as number)} from ${String(e.imported_from ?? 'file')}`
   if (e.event === 'PREVIEW') return Array.isArray(e.files) ? (e.files as string[]).join(', ') : ''
   return ''
 }
@@ -37,7 +40,9 @@ export default function Dashboard() {
   const api = useData()
   const status = useResource(() => api.status(), [api])
   const history = useResource(() => api.history(), [api])
-  const quality = useResource(() => api.quality(), [api])
+  const hasWarehouse = !!status.data?.current_version
+  // Data-quality figures exist only once a warehouse is loaded.
+  const quality = useResource(() => (hasWarehouse ? api.quality() : Promise.resolve(undefined)), [api, hasWarehouse])
 
   if (status.error) return <ErrorState error={status.error} onRetry={status.reload} />
   const s = status.data
@@ -92,7 +97,20 @@ export default function Dashboard() {
         </div>
       ) : !current ? (
         api.mode === 'local' ? (
-          <RegisterWarehouse onDone={status.reload} />
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="h-4 w-4 text-primary" /> Load your warehouse to begin
+              </CardTitle>
+              <CardDescription>
+                The warehouse is the file that new GPANI, WPMS, AquaWatch and bore-log exports are compared with, so nothing is added twice. Once it is loaded,
+                every page shows it.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CurrentWarehouse status={s} onStatusStale={status.reload} />
+            </CardContent>
+          </Card>
         ) : (
           <EmptyState
             icon={Database}
@@ -110,7 +128,7 @@ export default function Dashboard() {
           <StatCard
             label="Current warehouse version"
             value={<span>v{String(current.version).padStart(3, '0')}</span>}
-            hint={`${current.kind === 'BASELINE' ? 'Baseline' : 'Synchronized'} · ${fmtDate(current.created_at)}`}
+            hint={`${VERSION_KIND_META[current.kind]?.label ?? current.kind} · ${fmtDate(current.created_at)}`}
             icon={GitBranch}
             tone="teal"
             footer={<span className="font-mono text-[11px]">SHA-256 {current.sha256.slice(0, 16)}…</span>}
@@ -327,53 +345,5 @@ export default function Dashboard() {
         </Card>
       )}
     </div>
-  )
-}
-
-function RegisterWarehouse({ onDone }: { onDone: () => void }) {
-  const api = useData()
-  const [path, setPath] = useState('')
-  const [jobId, setJobId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const job = useJob(api, jobId, (j) => (j.status === 'succeeded' ? onDone() : setError(j.error ?? `Registration ${j.status}`)))
-  async function start() {
-    setError(null)
-    try {
-      setJobId((await api.init(path.trim())).job_id)
-    } catch (e) {
-      setError((e as Error).message)
-    }
-  }
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Database className="h-4 w-4 text-primary" /> Register the verified warehouse
-        </CardTitle>
-        <CardDescription>
-          One time only. The workbook is verified (ZIP, XML, single worksheet, ranges, ordering), copied into the private state directory as the read-only
-          baseline <strong>v000</strong> and indexed. The original file is never modified.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="wh-path">Full path of the .xlsx warehouse on this computer</Label>
-          <Input id="wh-path" placeholder="/path/to/WASH_..._QA_CORRECTED.xlsx" value={path} onChange={(e) => setPath(e.target.value)} />
-        </div>
-        {job && (
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-sm">
-              <span>{job.message || 'Starting…'}</span>
-              <span className="tabular text-muted-foreground">{Math.round(job.fraction * 100)}%</span>
-            </div>
-            <Progress value={job.fraction * 100} label="Registration progress" />
-          </div>
-        )}
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <Button onClick={start} disabled={!path.trim() || job?.status === 'running'} loading={job?.status === 'running'}>
-          Verify and register baseline
-        </Button>
-      </CardContent>
-    </Card>
   )
 }
