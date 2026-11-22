@@ -8,7 +8,7 @@ manifest.json               current version pointer, schema/engine versions
 warehouse_versions.json     immutable version records (see below)
 source_fingerprints.jsonl   latest status per observation key (hash, status, version, plan)
 facility_crosswalk.csv      VERIFIED_AUTO / APPROVED_MATCH / KEEP_SEPARATE links
-change_history.jsonl        append-only events: INIT, PREVIEW, DECISION, APPROVE, APPLY, ROLLBACK, …
+change_history.jsonl        append-only events: INIT, LOAD_WAREHOUSE, PREVIEW, DECISION, APPROVE, APPLY, ROLLBACK, …
 pending_conflicts.json      deferred / undecided review items carried between runs
 settings.json               validated configuration
 versions/                   WASH_Warehouse_v000.xlsx (baseline), v001, … (read-only)
@@ -20,6 +20,13 @@ jobs/  tmp/  uploads/       job journals, temporary output, uploaded exports
 ```
 
 ## Version record
+
+Every version has a kind: `BASELINE` (the first warehouse loaded), `SYNC` (written by an
+applied plan) or `LOADED` (a warehouse file loaded later, for example after QA corrections
+made in Excel; it records the file name and the reason given). A version becomes current only
+after its lookup index is complete, so every page shows either the previous version or the
+fully prepared new one; if an index is missing (it is a cache), the pages report that the
+warehouse is being prepared and refresh themselves while it is rebuilt in the background.
 
 Each version records: creation time, previous version, plan, source files with
 SHA-256, schema and engine versions, rows × columns, counts (added facilities,

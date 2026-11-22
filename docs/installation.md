@@ -22,16 +22,29 @@ npm --prefix apps/web run build:local
 Or run `./scripts/start-local.sh` (Windows: `scripts\start-local.ps1`), which does
 all of the above on first use and then starts the app.
 
-## Register the verified warehouse (once)
+## Load the current warehouse
+
+Start the app (`./scripts/start-local.sh` or `python -m wash_sync serve`), open **New Sync**
+and, in **step 1 · Current warehouse**, choose your latest warehouse workbook. It is checked
+(ZIP, XML, single worksheet, ordering, ranges), copied into the private state directory as the
+read-only `WASH_Warehouse_v000.xlsx` and prepared for search — about 5 minutes for 600,000
+rows. The original file is never modified. Every page then shows this warehouse.
+
+From the command line:
 
 ```bash
-wash-sync init --warehouse /path/to/WASH_GPANI_WPMS_AQUA_BORELOG_1986_2026_QA_CORRECTED.xlsx
+wash-sync load-warehouse /path/to/WASH_GPANI_WPMS_AQUA_BORELOG_1986_2026_QA_CORRECTED.xlsx
 ```
 
-The workbook is verified (ZIP, XML, single worksheet, ordering, ranges), copied into
-the private state directory as the read-only baseline `WASH_Warehouse_v000.xlsx`, and
-indexed. The original file is never modified. Choose the location with
-`--state-dir` or `WASH_SYNC_HOME` (default `~/.wash_sync`).
+Choose the location of the private state with `--state-dir` or `WASH_SYNC_HOME`
+(default `~/.wash_sync`).
+
+The latest version is remembered, so you load the warehouse only once. If it is later
+edited outside the app (for example QA corrections in Excel), load that file again with
+**Load a newer warehouse file** (or `wash-sync load-warehouse FILE -r "what changed"`): it
+becomes the next version and earlier versions stay available for rollback. Files that are not
+the warehouse (such as a source export), copies of an earlier version and the file that is
+already current are recognized and refused with an explanation.
 
 ## Daily use
 
@@ -39,8 +52,9 @@ indexed. The original file is never modified. Choose the location with
 python -m wash_sync serve       # http://127.0.0.1:8765
 ```
 
-1. **New Sync** — drop the latest export(s); check the detected source, column
-   mapping, personal-data notice and survey period; run the dry run.
+1. **New Sync** — step 1 shows the current warehouse; in step 2 drop the latest export(s),
+   check the detected source, column mapping, personal-data notice and survey period, and
+   run the dry run.
 2. **Sync Preview** — counts per classification and source, new columns, every record
    with its evidence and exact cell changes; download the audit.
 3. **Conflicts Center / Match Inspector** — decide each review item with a reason.
@@ -51,6 +65,7 @@ python -m wash_sync serve       # http://127.0.0.1:8765
 ## Command line equivalents
 
 ```bash
+wash-sync load-warehouse WASH_warehouse.xlsx -r "QA corrections"   # step 1 (first time: v000)
 wash-sync inspect exports/survey_2027_dry.xlsx
 wash-sync preview exports/survey_2027_dry.xlsx --period "2027 dry"
 wash-sync review list <plan-id>
