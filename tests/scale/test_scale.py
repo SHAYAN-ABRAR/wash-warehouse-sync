@@ -53,19 +53,21 @@ def test_scale_end_to_end(tmp_path):
     timings: dict[str, float] = {}
     peaks: dict[str, float] = {}
 
+    # perf_counter is monotonic and pauses while the computer sleeps, so a suspended laptop or a clock
+    # adjustment cannot inflate a phase.
     def phase(name: str, started: float) -> None:
-        timings[name] = round(time.time() - started, 1)
+        timings[name] = round(time.perf_counter() - started, 1)
         peaks[name] = round(_rss_mb(), 1)
         print(f"[scale] {name}: {timings[name]}s (peak RSS so far {peaks[name]} MB)", flush=True)
 
     wh = os.path.join(work, "synthetic_scale_warehouse.xlsx")
-    t = time.time()
+    t = time.perf_counter()
     info = write_synthetic_warehouse(wh, rows=rows, columns=196, seed=7)
     phase("generate_warehouse", t)
 
     state = os.path.join(work, "state")
     eng = Engine(Settings(state_dir=state), state)
-    t = time.time()
+    t = time.perf_counter()
     baseline = eng.init(wh, actor="scale-test")
     phase("init_verify_and_index", t)
     assert baseline["rows"] == rows and baseline["columns"] == 196
@@ -108,7 +110,7 @@ def test_scale_end_to_end(tmp_path):
     src = os.path.join(work, "synthetic_scale_source.xlsx")
     write_table(src, AQUA_SURVEY_HEADERS, src_rows, "Survey Data")
 
-    t = time.time()
+    t = time.perf_counter()
     plan = eng.preview([PreviewInput(src)], actor="scale-test")
     phase("preview", t)
     by = {k: v for k, v in plan.summary["by_classification"].items() if v}
@@ -120,7 +122,7 @@ def test_scale_end_to_end(tmp_path):
     assert by["CONFLICTING_MEASUREMENT"] == 100
     assert by["INVALID_SOURCE_RECORD"] == 50
 
-    t = time.time()
+    t = time.perf_counter()
     decided = eng.bulk_decide(plan.plan_id, "UPDATED_MEASUREMENT", "ACCEPT_NEW_VALUES", "Scale test: accept corrections", "scale-test")
     eng.approve(plan.plan_id, "scale-test")
     result = eng.apply(plan.plan_id, "scale-test")
@@ -133,7 +135,7 @@ def test_scale_end_to_end(tmp_path):
     assert record["validation"]["ok"]
     assert record["validation"]["preservation"]["compared_rows"] == rows
 
-    t = time.time()
+    t = time.perf_counter()
     rerun = eng.preview([PreviewInput(src)], actor="scale-test")
     phase("idempotent_rerun_preview", t)
     again = {k: v for k, v in rerun.summary["by_classification"].items() if v}
