@@ -16,6 +16,7 @@ GPANI · WPMS · AquaWatch · Bore Logs → one verified, versioned Excel workbo
 > [!IMPORTANT]
 > **The public GitHub Pages website is a demonstration and frontend distribution. Production synchronization of large private Excel warehouses runs in the local processing environment.**
 > Everything on the public site is synthetic and was produced by the real engine. The site never connects to a warehouse, an engine or your computer, and never asks for tokens.
+> To sync your own warehouse, run the same app on your computer — [Quick start](#quick-start-local-production), one command.
 
 **Live demo:** https://shayan-abrar.github.io/wash-warehouse-sync/
 
@@ -23,16 +24,19 @@ GPANI · WPMS · AquaWatch · Bore Logs → one verified, versioned Excel workbo
 
 ## What it does
 
-When a new GPANI, WPMS, AquaWatch or bore-log export arrives, you:
+Two inputs: **the current warehouse** and **the files to sync**. When a new GPANI, WPMS, AquaWatch or bore-log export arrives, you:
 
-1. select the export(s) — the source system, columns and survey year/season are detected by header name;
-2. run a **dry run** that compares every record with the current warehouse version;
-3. see what is **new, changed, unchanged, duplicated, conflicting or invalid** — with evidence for every match;
+1. load the current warehouse once (step 1 of *New Sync*; the latest version is remembered, and a copy edited in Excel can be loaded again as the next version) — every page then shows it;
+2. select the export(s) to sync — the source system, columns and survey year/season are detected by header name — and run a **dry run** that compares every record with the warehouse;
+3. see what is **new, changed, unchanged, duplicated, conflicting or invalid** — with evidence for every match; records already in the warehouse are recognized, so nothing is added twice;
 4. resolve conflicts with a recorded reason;
 5. approve and apply — the engine writes a **new versioned workbook**, verifies it (including a cell-level proof that nothing else changed) and publishes it atomically;
 6. download the workbook and the complete audit.
 
 Running the same files again changes nothing: no new rows, columns, values, counts or versions.
+
+![New Sync in the app on your computer](docs/screenshots/local-new-sync.png)
+*New Sync in the app running on your computer (synthetic warehouse shown): step 1 is the current warehouse — loaded, verified and ready for search — and step 2 takes the files to sync.*
 
 | | |
 |---|---|
@@ -89,10 +93,10 @@ cd wash-warehouse-sync
 ./scripts/start-local.sh --state-dir ~/wash_sync_state      # Windows: scripts\start-local.ps1
 ```
 
-The launcher creates `.venv`, installs the engine, builds the interface once and opens `http://127.0.0.1:8765`. Then register the verified warehouse once:
+The launcher creates `.venv`, installs the engine, builds the interface once and opens `http://127.0.0.1:8765`. Open **New Sync**, choose your warehouse workbook in **step 1 · Current warehouse**, then add the files to sync in **step 2**. The same from the command line:
 
 ```bash
-.venv/bin/wash-sync init --warehouse /path/to/WASH_GPANI_WPMS_AQUA_BORELOG_1986_2026_QA_CORRECTED.xlsx --state-dir ~/wash_sync_state
+.venv/bin/wash-sync load-warehouse /path/to/WASH_GPANI_WPMS_AQUA_BORELOG_1986_2026_QA_CORRECTED.xlsx --state-dir ~/wash_sync_state
 ```
 
 Manual installation, requirements and configuration: [docs/installation.md](docs/installation.md).
@@ -101,7 +105,8 @@ Manual installation, requirements and configuration: [docs/installation.md](docs
 
 | Step | Web interface | Command line |
 |---|---|---|
-| Inspect a file | New Sync → drop file | `wash-sync inspect FILE` |
+| Load the current warehouse | New Sync → 1 · Current warehouse | `wash-sync load-warehouse FILE [-r "what changed"]` |
+| Inspect a file | New Sync → 2 · Files to sync | `wash-sync inspect FILE` |
 | Dry run | New Sync → *Run dry-run comparison* | `wash-sync preview FILE... [--period "2027 dry"] [--strict]` |
 | Review conflicts | Conflicts Center / Match Inspector | `wash-sync review list PLAN` · `review decide PLAN R00001 -d KEEP_SEPARATE -r "…"` |
 | Approve | Sync Preview → *Approve plan* | `wash-sync approve PLAN` |
@@ -148,31 +153,32 @@ Full rules: [docs/matching-rules.md](docs/matching-rules.md) · state and audit 
 
 | Suite | Tests |
 |---|---|
-| Python unit + integration + local API (`pytest`) | 122 |
-| Web unit + component (`vitest`) | 24 |
-| End-to-end on the production Pages build (`playwright`, desktop + mobile) — also run against the live site | 11 |
+| Python unit + integration + local API (`pytest`) | 141 |
+| Web unit + component (`vitest`) | 28 |
+| End-to-end on the production Pages build (`playwright`, desktop + mobile) — also run against the live site | 12 |
 
-The integration suite covers initial creation, new facilities, new annual and seasonal surveys, missing-value fills, conflicting measurements, geological profile updates, existing observations, idempotent reruns, rejected GPS-only matches, workbook integrity, preservation of unrelated cells, the single worksheet, recovery after an interrupted export and geographic row ordering.
+The integration suite covers initial creation, new facilities, new annual and seasonal surveys, missing-value fills, conflicting measurements, geological profile updates, existing observations, idempotent reruns, rejected GPS-only matches, workbook integrity, preservation of unrelated cells, the single worksheet, recovery after an interrupted export and geographic row ordering — and loading the current warehouse: a copy edited and re-saved the way Excel does (rows typed in, text stored as shared strings, a stale filter range) loads as the next version and takes further syncs that add rows and columns, while a source export chosen by mistake, an older copy or the already-current file are refused.
 
 **Calibration against the real warehouse** (run privately; no data leaves the machine): every previously integrated source export across all four systems — AquaWatch surveys 2018–2026, the historical GWC table, WPMS, GPANI and bore logs — was recognized as already present (`UNCHANGED`), apart from duplicates the warehouse had already collapsed and a handful of genuinely invalid source rows. An end-to-end apply on the full ~627,000 × 196 workbook (≈800 MB of sheet XML) completed in about 4 minutes using under 300 MB of memory, passed all 14 integrity checks and proved preservation of every untouched row.
 
 **Synthetic scale test** (`pytest -m scale`, 600,000 rows × 196 columns): passed — see [Scale test](#scale-test).
 
-**Local production workflow through the real UI** (`apps/web/scripts/verify-local.mjs`): register → upload → dry run → decide → approve → apply → download the workbook and audit → explorer, with no console errors.
+**Local production workflow through the real UI** (`apps/web/scripts/verify-local.mjs`, from an empty state): load the warehouse in step 1 (a source export picked by mistake is refused) → explorer shows it → add a file to sync → dry run → decide → approve → apply → download the workbook and audit → edit the download the way Excel would → load it as the newer warehouse → explorer, dashboard and history show it — with no console errors.
 
 ## Scale test
 
 `pytest -m scale` generates a synthetic warehouse of **600,000 rows × 196 columns** (69.6 MB, comparable to the real
-workbook), registers it, previews a 5,150-record AquaWatch export mixing every case, bulk-decides the 500 changed
-measurements, applies the plan and then re-runs the same export. Measured on a 4-core laptop (every row of the table is asserted by the test):
+workbook), loads it, previews a 5,150-record AquaWatch export mixing every case, bulk-decides the 500 changed
+measurements, applies the plan and then re-runs the same export. Measured on a 4-core laptop with a monotonic clock
+(it pauses if the computer sleeps); every result in the table is asserted by the test:
 
 | Phase | Time | Result |
 |---|---|---|
-| Generate the synthetic warehouse (streaming) | 130 s | 600,000 × 196, one worksheet |
-| Register baseline: deep verification, copy, index | 281 s | v000 |
-| Dry run of 5,150 records | 11 s | 3,000 new observations · 500 new facilities · 500 changed (review) · 1,000 unchanged · 100 conflicting · 50 invalid — exactly as constructed |
-| 500 bulk decisions + approve + apply (write, verify, preservation proof) | 356 s | v001: 600,500 rows, all checks passed, 600,000 base rows compared |
-| Idempotent re-run (includes indexing v001 once) | 201 s | 5,000 `UNCHANGED`; only the 100 conflicting and 50 invalid source rows remain; **no new version** |
+| Generate the synthetic warehouse (streaming) | 56 s | 600,000 × 196, one worksheet |
+| Load it as the baseline: deep verification, copy, index | 194 s | v000 |
+| Dry run of 5,150 records | 10 s | 3,000 new observations · 500 new facilities · 500 changed (review) · 1,000 unchanged · 100 conflicting · 50 invalid — exactly as constructed |
+| 500 bulk decisions + approve + apply (write, verify, preservation proof, then index the new version before it becomes current) | 464 s | v001: 600,500 rows, all checks passed, 600,000 base rows compared |
+| Idempotent re-run | 13 s | 5,000 `UNCHANGED`; only the 100 conflicting and 50 invalid source rows remain; **no new version** |
 
 Peak resident memory (engine plus the test harness's own copy of the synthetic wells): **427 MiB**.
 
@@ -185,6 +191,7 @@ Peak resident memory (engine plus the test harness's own copy of the synthetic w
 - GPANI identity includes the source coordinates, so a GPS correction surfaces as an identity conflict for review.
 - The historical 1986–2017 AquaWatch values remain unverified by design and are preserved verbatim.
 - The local server is a single-user tool for one trusted computer; it has no multi-user accounts.
+- Workbooks saved by Excel keep text in a shared-string table, which the engine holds in memory while verifying and indexing; loading such a file has been tested on synthetic warehouses, not yet on a full 627,000-row Excel save.
 - "Private storage" is a verified copy to a configured folder (for example a synced organisational drive); there is no direct cloud API integration.
 - The private index for a ~627k-row warehouse uses roughly 0.7 GB of disk (rebuildable cache).
 
