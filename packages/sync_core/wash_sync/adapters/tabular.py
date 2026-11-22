@@ -168,7 +168,7 @@ def estimate_rows(path: str, sheet: str | None = None) -> int | None:
         info = read_workbook_info(path)
         with zipfile.ZipFile(path) as zf, zf.open(info.sheet(sheet).member) as fh:
             head = fh.read(65536)
-        m = re.search(rb'<dimension ref="[A-Z]+\d+:[A-Z]+(\d+)"', head)
+        m = re.search(rb'<dimension\b[^>]*?\bref="(?:[A-Z]+\d+:)?[A-Z]+(\d+)"', head)
         return int(m.group(1)) if m else None
     if ext == ".xls":
         import xlrd  # noqa: PLC0415

@@ -15,7 +15,17 @@ from typing import Any
 from xml.parsers import expat
 
 from ..schema import EXCEL_MAX_CELL_CHARS, EXCEL_MAX_COLS, EXCEL_MAX_ROWS, col_index, col_letter
-from .reader import CELL_REF_STRIP_RE_SAFE, CELL_ROWNUM_RE, SheetStream, parse_cells, read_workbook_info
+from .reader import (
+    AUTOFILTER_REF_RE,
+    CELL_REF_STRIP_RE_SAFE,
+    CELL_ROWNUM_RE,
+    DIMENSION_REF_RE,
+    SheetStream,
+    load_shared_strings,
+    parse_cells,
+    read_workbook_info,
+)
+from .writer import STRUCTURAL_BLOCKERS
 
 WORKSHEET_CT = "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"
 
@@ -71,7 +81,15 @@ def verify_workbook(
     expected_rows: int | None = None,
     progress: Callable[[float], None] | None = None,
     deep: bool = True,
+    external: bool = False,
 ) -> VerifyReport:
+    """Integrity report for a single-sheet warehouse workbook.
+
+    ``external`` is for workbooks produced outside this engine (the registered baseline or a
+    warehouse edited in Excel): a stale declared dimension or filter range is then a warning,
+    because it does not affect the data and the next synchronization writes both from the
+    actual data. Workbooks written by this engine must match exactly.
+    """
     report = VerifyReport(path=path)
     try:
         zf = zipfile.ZipFile(path)
@@ -95,6 +113,8 @@ def verify_workbook(
                     report.add("xml_well_formed", False, err)
                     return report
         report.add("xml_well_formed", True, f"{len(info.members)} parts parsed")
+        # Text saved by Excel lives in the shared-string table; header and length checks need it.
+        shared = load_shared_strings(zf, info.shared_strings_member)
     sheet = info.sheets[0]
     stream = SheetStream(path, sheet.member, progress)
     max_col = 0
@@ -103,8 +123,11 @@ def verify_workbook(
     ordering_errors: list[str] = []
     long_cells = 0
     header: list[str] = []
+    formula_rows = 0
     for row in stream.rows():
         n_rows += 1
+        if row.inner and b"<f" in row.inner:
+            formula_rows += 1
         if row.num <= last_row:
             ordering_errors.append(f"row {row.num} after {last_row}")
         last_row = row.num
@@ -113,7 +136,7 @@ def verify_workbook(
         row_bytes = str(row.num).encode()
         if any(n != row_bytes for n in CELL_ROWNUM_RE.findall(inner)) and len(ordering_errors) < 20:
             ordering_errors.append(f"row {row.num} contains a cell reference to another row")
-        for cell in parse_cells(inner):
+        for cell in parse_cells(inner, shared):
             if cell.col <= prev_col and len(ordering_errors) < 20:
                 ordering_errors.append(f"row {row.num}: columns out of order at {cell.letters.decode()}")
             prev_col = cell.col
@@ -128,19 +151,33 @@ def verify_workbook(
     report.add("excel_limits", last_row <= EXCEL_MAX_ROWS and max_col <= EXCEL_MAX_COLS,
                f"{last_row:,} rows x {max_col} columns")
     report.add("cell_length_limit", long_cells == 0, f"{long_cells} cells exceed {EXCEL_MAX_CELL_CHARS} chars")
-    dim = re.search(rb'<dimension ref="([^"]+)"', stream.prologue)
+    dim = DIMENSION_REF_RE.search(stream.prologue)
     expected_ref = f"A1:{col_letter(max(1, max_col))}{last_row}"
-    report.add("dimension", bool(dim) and dim.group(1).decode() == expected_ref,
-               f"declared {dim.group(1).decode() if dim else None}, actual {expected_ref}")
-    af = re.search(rb'<autoFilter ref="([^"]+)"', stream.epilogue)
+    refreshed = " (rewritten from the data by the next synchronization)" if external else ""
+
+    def layout(match: bool) -> bool | None:
+        return True if match else (None if external else False)
+
+    dim_ok = bool(dim) and dim.group(2).decode() == expected_ref
+    report.add("dimension", layout(dim_ok),
+               f"declared {dim.group(2).decode() if dim else None}, actual {expected_ref}" + ("" if dim_ok else refreshed))
+    af = AUTOFILTER_REF_RE.search(stream.epilogue)
     if af:
-        report.add("autofilter_range", af.group(1).decode() == expected_ref,
-                   f"autoFilter {af.group(1).decode()} vs data {expected_ref}")
+        af_ok = af.group(2).decode() == expected_ref
+        report.add("autofilter_range", layout(af_ok),
+                   f"autoFilter {af.group(2).decode()} vs data {expected_ref}" + ("" if af_ok else refreshed))
         names = [t for (n, _l, t) in info.defined_names if n == "_xlnm._FilterDatabase"]
         if names:
             target = names[0].split("!")[-1].replace("$", "")
             report.add("filter_defined_name", True if target == expected_ref else None,
-                       f"_FilterDatabase {names[0]} (sheet autoFilter {af.group(1).decode()})")
+                       f"_FilterDatabase {names[0]} (sheet autoFilter {af.group(2).decode()})")
+    if external:
+        blockers = [f"formulas in {formula_rows:,} rows"] if formula_rows else []
+        blockers += [label for token, label in STRUCTURAL_BLOCKERS if token in stream.epilogue]
+        report.add("sync_compatibility", True if not blockers else None,
+                   "no formulas, merged cells, tables or conditional formats" if not blockers else
+                   "Contains " + ", ".join(blockers) + ". Syncs that add rows or columns will be refused until these "
+                   "are removed (for example, paste values over formulas) and the file is loaded again.")
     frozen = re.search(rb'<pane [^>]*state="frozen"', stream.prologue)
     report.add("frozen_header", True if frozen else None, "frozen panes present" if frozen else "no frozen panes")
     report.stats["header"] = header

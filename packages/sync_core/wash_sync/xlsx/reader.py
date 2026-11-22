@@ -39,6 +39,10 @@ V_RE = re.compile(rb"<v>(.*?)</v>", re.S)
 RPH_RE = re.compile(rb"<rPh\b.*?</rPh>", re.S)
 #: Matches the row-number part of a canonical cell reference (``<c r="AB12"``).
 CELL_REF_STRIP_RE_SAFE = re.compile(rb'(<c r="[A-Z]{1,3})\d+"')
+#: ``ref`` of ``<dimension>`` / ``<autoFilter>`` whatever the attribute order or spacing
+#: (Excel writes ``<dimension ref="A1:B2"/>``, other tools ``<dimension ref="A1:B2" />``).
+DIMENSION_REF_RE = re.compile(rb'(<dimension\b[^>]*?\bref=")([^"]*)(")')
+AUTOFILTER_REF_RE = re.compile(rb'(<autoFilter\b[^>]*?\bref=")([^"]*)(")')
 CELL_ROWNUM_RE = re.compile(rb'<c\b[^>]*?\br="[A-Z]{1,3}(\d+)"')
 OOXML_ESC_RE = re.compile(r"_x([0-9A-Fa-f]{4})_")
 
@@ -58,6 +62,20 @@ def parse_number_text(raw: bytes) -> int | float:
     if text.lstrip("-").isdigit():
         return int(text)
     return float(text)
+
+
+class SharedRef(int):
+    """Position in the shared-string table, returned when the table was not loaded.
+
+    Workbooks saved by Excel store text this way. Callers that only move or compare raw cells
+    (the streaming writer, the preservation proof between a version and its successor, which keeps
+    the same table) need no text; anything that reads text loads the table and gets ``str``.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return f"SharedRef({int(self)})"
 
 
 @dataclass(slots=True)
@@ -100,9 +118,7 @@ def _decode(ctype: str, v: bytes | None, t: bytes | None, shared: list[str] | No
     if v is None:
         return None
     if ctype == "s":
-        if shared is None:
-            raise ValueError("Shared string cell found but no shared string table loaded")
-        return shared[int(v)]
+        return SharedRef(int(v)) if shared is None else shared[int(v)]
     if ctype in ("str", "e"):
         return xml_text(v)
     if ctype == "b":

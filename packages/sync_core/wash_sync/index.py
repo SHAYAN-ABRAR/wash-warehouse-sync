@@ -23,7 +23,13 @@ from .admin import LEVELS, AliasTable
 from .geo import bbox_deg, haversine_m, in_bangladesh
 from .schema import WarehouseSchema, parse_period_column
 from .text import norm_code, norm_id, norm_key, split_tokens, to_text
-from .xlsx.reader import SheetStream, load_shared_strings, read_workbook_info
+from .xlsx.reader import (
+    AUTOFILTER_REF_RE,
+    DIMENSION_REF_RE,
+    SheetStream,
+    load_shared_strings,
+    read_workbook_info,
+)
 
 INDEX_FORMAT = 6
 SRC_BITS = {"GPANI": 1, "WPMS": 2, "AQUAWATCH": 4, "BORELOG": 8}
@@ -186,7 +192,9 @@ class WarehouseIndex:
                     st["num"] += 1
                     v = float(c.value)
                     st["min"] = v if st["min"] is None or v < st["min"] else st["min"]
+        last_row = 0
                     st["max"] = v if st["max"] is None or v > st["max"] else st["max"]
+            last_row = row.num
                 else:
                     st["str"] += 1
                     if isinstance(c.value, str) and len(c.value) > st["maxlen"]:
@@ -262,8 +270,8 @@ class WarehouseIndex:
             """
         )
         dominant_attrs = row_attrs.most_common(1)[0][0].decode() if row_attrs else ""
-        dims = re.search(rb'<dimension ref="([^"]+)"', stream.prologue)
-        autofilter = re.search(rb'<autoFilter ref="([^"]+)"', stream.epilogue)
+        dims = DIMENSION_REF_RE.search(stream.prologue)
+        autofilter = AUTOFILTER_REF_RE.search(stream.epilogue)
         q = quality.finish(conn)
         meta = {
             "format": str(INDEX_FORMAT), "engine_version": __version__, "sha256": sha256,
@@ -271,8 +279,8 @@ class WarehouseIndex:
             "sheet_name": sheet.name, "sheet_member": sheet.member, "sheet_count": str(len(info.sheets)),
             "headers": json.dumps(headers, ensure_ascii=False), "n_rows": str(count),
             "header_styles": json.dumps(header_styles), "widths": json.dumps(widths),
-            "row_attrs": dominant_attrs, "dimension": dims.group(1).decode() if dims else "",
-            "autofilter": autofilter.group(1).decode() if autofilter else "",
+            "row_attrs": dominant_attrs, "dimension": dims.group(2).decode() if dims else "",
+            "autofilter": autofilter.group(2).decode() if autofilter else "", "last_row": str(last_row),
             "defined_names": json.dumps(info.defined_names, ensure_ascii=False),
             "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "quality": json.dumps(q, ensure_ascii=False),
             "complete": "1",

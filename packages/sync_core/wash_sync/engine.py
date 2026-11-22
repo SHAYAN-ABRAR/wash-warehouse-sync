@@ -221,7 +221,9 @@ class Engine:
         if path is None:
             record = self.store.version(version) if version is not None else self.require_current()
             path = self.store.version_path(record)
-        report = verify_workbook(path, progress=progress, deep=deep)
+        # Registered baselines and loaded files come from outside the engine; synced versions are its own output.
+        external = record is None or record.get("kind") != "SYNC"
+        report = verify_workbook(path, progress=progress, deep=deep, external=external)
         out = report.to_dict()
         out["path"] = os.path.basename(path)
         if record is not None:

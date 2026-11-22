@@ -22,7 +22,7 @@ from typing import Any
 
 from ..numbers import excel_number_text
 from ..schema import EXCEL_MAX_CELL_CHARS, EXCEL_MAX_COLS, EXCEL_MAX_ROWS, col_letter
-from .reader import RawRow, SheetStream, parse_cells, read_workbook_info
+from .reader import AUTOFILTER_REF_RE, DIMENSION_REF_RE, RawRow, SheetStream, parse_cells, read_workbook_info
 
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f￾￿]")
 _LITERAL_ESC = re.compile(r"_(x[0-9A-Fa-f]{4})_")
@@ -30,10 +30,14 @@ CELL_REF_RE = re.compile(rb'(<c r="[A-Z]{1,3})\d+"')
 ROW_R_RE = re.compile(rb'\s*\br="\d+"')
 ROW_SPANS_RE = re.compile(rb'\s*\bspans="[^"]*"')
 CELL_R_ATTR_RE = re.compile(rb'\br="[A-Z]{1,3}\d+"')
-UNSUPPORTED_EPILOGUE = (
-    b"<mergeCells", b"<conditionalFormatting", b"<dataValidations", b"<hyperlinks",
-    b"<tableParts", b"<ignoredErrors", b"<x14:", b"<extLst",
+#: Sheet features whose references this writer does not rewrite: structural edits (inserted rows
+#: or columns) are refused while any of them is present.
+STRUCTURAL_BLOCKERS = (
+    (b"<mergeCells", "merged cells"), (b"<conditionalFormatting", "conditional formatting"),
+    (b"<dataValidations", "data validation"), (b"<hyperlinks", "hyperlinks"), (b"<tableParts", "Excel tables"),
+    (b"<ignoredErrors", "ignored-error markers"), (b"<x14:", "Excel 2010 extensions"), (b"<extLst", "extension lists"),
 )
+UNSUPPORTED_EPILOGUE = tuple(token for token, _label in STRUCTURAL_BLOCKERS)
 
 
 class OperationCancelled(RuntimeError):
@@ -98,6 +102,9 @@ class RewriteSpec:
     compresslevel: int = 6
     #: Row attributes (without r=/spans=) for rows inserted directly below the header.
     default_row_attrs: bytes = b""
+    #: Last row number of the base sheet as measured from its data (the lookup index). Used instead
+    #: of the declared ``<dimension>``, which files saved by other programs may leave stale or omit.
+    base_last_row: int | None = None
 
 
 @dataclass
@@ -188,7 +195,7 @@ def rewrite_workbook(
         if header is None or header.num != 1:
             raise UnsafeWorkbookError("Warehouse header row (row 1) not found")
         prologue = stream.prologue
-        base_last = _base_last_row(prologue)
+        base_last = spec.base_last_row or _base_last_row(prologue)
         final_rows = base_last + n_inserts
         if final_rows > EXCEL_MAX_ROWS:
             raise UnsafeWorkbookError(
@@ -197,7 +204,7 @@ def rewrite_workbook(
             )
         last_col = col_letter(len(spec.final_headers))
         result.final_ref = f"A1:{last_col}{final_rows}"
-        prologue = re.sub(rb'<dimension ref="[^"]*"/>', f'<dimension ref="{result.final_ref}"/>'.encode(), prologue, count=1)
+        prologue = _set_dimension(prologue, result.final_ref)
         if columns_shift:
             prologue = _patch_cols(prologue, col_map, spec, final_index)
         fh.write(prologue)
@@ -237,7 +244,7 @@ def rewrite_workbook(
         epilogue = stream.epilogue
         if structural and any(tok in epilogue for tok in UNSUPPORTED_EPILOGUE):
             raise UnsafeWorkbookError("Sheet contains merged cells/conditional formats/tables; structural edits refused")
-        epilogue = re.sub(rb'<autoFilter ref="[^"]*"', f'<autoFilter ref="{result.final_ref}"'.encode(), epilogue, count=1)
+        epilogue = AUTOFILTER_REF_RE.sub(lambda m: m.group(1) + result.final_ref.encode() + m.group(3), epilogue, count=1)
         fh.write(epilogue)
 
     sheet_info = None
@@ -265,10 +272,22 @@ def rewrite_workbook(
 
 
 def _base_last_row(prologue: bytes) -> int:
-    m = re.search(rb'<dimension ref="[A-Z]+\d+:[A-Z]+(\d+)"', prologue)
-    if not m:
+    m = DIMENSION_REF_RE.search(prologue)
+    last = re.search(rb"(\d+)$", m.group(2)) if m else None
+    if not last:
         raise UnsafeWorkbookError("Worksheet has no <dimension> range; cannot validate row limits")
-    return int(m.group(1))
+    return int(last.group(1))
+
+
+def _set_dimension(prologue: bytes, ref: str) -> bytes:
+    """Point ``<dimension>`` at the final range whatever its formatting; add the element when it is missing."""
+    patched, found = DIMENSION_REF_RE.subn(lambda m: m.group(1) + ref.encode() + m.group(3), prologue, count=1)
+    if found:
+        return patched
+    anchor = re.search(rb"<sheetPr\b[^>]*/>|</sheetPr>", prologue) or re.search(rb"<worksheet\b[^>]*>", prologue)
+    if anchor is None:
+        raise UnsafeWorkbookError("Worksheet start tag not found")
+    return prologue[: anchor.end()] + f'<dimension ref="{ref}"/>'.encode() + prologue[anchor.end():]
 
 
 def _write_inserts(fh: Any, anchor: int, anchor_row: RawRow, shift: int, spec: RewriteSpec,

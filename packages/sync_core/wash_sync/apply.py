@@ -262,6 +262,7 @@ def _apply(settings: Settings, store: StateStore, plan: Plan, actor: str, curren
         header_styles={c.name: c.header_style for c in new_columns}, widths={c.name: c.width for c in new_columns},
         sheet_name=index.sheet_name, compresslevel=settings.compression_level,
         default_row_attrs=(" " + index.meta.get("row_attrs", "").strip()).encode() if index.meta.get("row_attrs") else b"",
+        base_last_row=int(index.meta["last_row"]) if index.meta.get("last_row") else None,
     )
     new_styles = {c.name: _new_column_style(c.name, styles) for c in new_columns}
     for target, cols in col.updates.items():
