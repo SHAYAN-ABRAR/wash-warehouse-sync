@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import time
 
 import pytest
 from fastapi.testclient import TestClient
 from wash_sync_api.server import create_app
 
-from tests.conftest import aqua_row, aqua_rows, write_survey
+from tests.conftest import aqua_row, aqua_rows, current_path, edited_warehouse, write_survey
 
 TOKEN = "test-token"
 
@@ -119,3 +121,68 @@ def test_download_links_work_with_the_page_cookie_but_mutations_need_the_header(
         assert c.get("/api/v1/versions/0/download").status_code == 200  # plain link: cookie only
         r = c.post("/api/v1/plans/x/approve", json={})
         assert r.status_code == 401  # state changes still require the header
+
+
+def _load(client, path, file_name, **params):
+    with open(path, "rb") as fh:
+        return client.post("/api/v1/warehouse/load", params={"file_name": file_name, **params}, content=fh.read(),
+                           headers={"Content-Type": "application/octet-stream"})
+
+
+def test_load_the_current_warehouse_over_http(client, engine, world, tmp_path):
+    path, added, _ = edited_warehouse(world, tmp_path / "edited.xlsx")
+    res = _load(client, path, "WASH edited.xlsx", reason="QA fixes made in Excel")
+    assert res.status_code == 200, res.text
+    job = wait(client, res.json())
+    assert job["status"] == "succeeded", job
+    assert job["result"]["version"] == 1 and job["result"]["kind"] == "LOADED"
+    status = client.get("/api/v1/status").json()
+    assert status["current_version"]["version"] == 1 and status["index"] == {"ready": True, "progress": 1.0}
+    rows = client.get("/api/v1/warehouse/rows", params={"q": added["aqua_gwc_id"].lower()}).json()
+    assert rows["total"] == 1  # the explorer shows the loaded warehouse straight away
+    events = client.get("/api/v1/versions").json()["events"]
+    assert any(e["event"] == "LOAD_WAREHOUSE" and e["reason"] == "QA fixes made in Excel" and e["by"] == "api-tester"
+               for e in events)
+    assert os.listdir(engine.store.p("uploads")) == []  # the received copy is removed once loaded
+
+
+def test_loading_the_current_file_over_http_changes_nothing(client, engine):
+    job = wait(client, _load(client, current_path(engine), "same.xlsx").json())
+    assert job["status"] == "succeeded" and job["result"]["unchanged"]
+    assert client.get("/api/v1/versions").json()["current_version"] == 0
+
+
+def test_a_source_export_is_rejected_as_warehouse_at_once(client, engine, world, tmp_path):
+    src = write_survey(tmp_path / "survey.xlsx", [aqua_row(1, "2027 (Dry Season)", aqua_rows(world)[0])])
+    res = _load(client, src, "survey.xlsx")
+    assert res.status_code == 400 and "not the WASH warehouse" in res.json()["detail"]
+    assert os.listdir(engine.store.p("uploads")) == []
+    assert client.post("/api/v1/warehouse/load", params={"file_name": "w.csv"}, content=b"a,b").status_code == 400
+    assert client.get("/api/v1/versions").json()["current_version"] == 0
+
+
+def test_warehouse_dropped_into_files_to_sync_is_explained(client, engine):
+    with open(current_path(engine), "rb") as fh:
+        up = client.post("/api/v1/uploads", files={"file": ("warehouse.xlsx", fh)}).json()
+    assert up["detection"]["source"] is None and "step 1" in up["detection"]["reason"]
+
+
+def test_reads_answer_503_while_the_index_is_prepared_then_recover(client, engine):
+    shutil.rmtree(engine.store.p("index"))
+    first = client.get("/api/v1/warehouse/schema")
+    assert first.status_code == 503 and "Preparing warehouse v000" in first.json()["detail"]
+    assert first.headers["retry-after"] == "3"
+    for _ in range(600):
+        res = client.get("/api/v1/warehouse/schema")
+        if res.status_code != 503:
+            break
+        time.sleep(0.05)
+    assert res.status_code == 200 and res.json()["rows"] > 0
+    assert client.get("/api/v1/status").json()["index"]["ready"]
+
+
+def test_loading_a_warehouse_needs_the_session_token(engine):
+    app = create_app(engine.settings.state_dir, static_dir=None, token=TOKEN)
+    with TestClient(app) as c:
+        res = c.post("/api/v1/warehouse/load", params={"file_name": "w.xlsx"}, content=b"PK")
+        assert res.status_code == 401

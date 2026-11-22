@@ -316,6 +316,15 @@ def _apply(settings: Settings, store: StateStore, plan: Plan, actor: str, curren
                               "plan_id": plan.plan_id, "by": actor, "error": str(exc)[:500]})
         raise
     shutil.rmtree(tmp_dir, ignore_errors=True)
+    # Prepare the lookup index before the version becomes current, so the explorer and the next
+    # dry run never meet a half-built index. It is a rebuildable cache: a failure here never blocks
+    # publishing a verified version (the index is then built on first use).
+    p("index", 0.0, "Preparing the new version for search")
+    try:
+        WarehouseIndex.open_or_build(final_path, store.p("index"), sha,
+                                     progress=lambda f: p("index", f, "Preparing the new version for search")).close()
+    except Exception:  # noqa: BLE001
+        pass
     by_class = collections.Counter()
     for rr in plan.records:
         if outcome.get(rr.rec_id) not in (None, "UNDECIDED", "REJECT", "DEFER", "KEEP_EXISTING") or (

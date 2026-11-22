@@ -17,6 +17,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import threading
 import webbrowser
 from pathlib import Path
@@ -31,12 +32,13 @@ from wash_sync.adapters.base import detect_source
 from wash_sync.apply import load_plan
 from wash_sync.audit import FILES as AUDIT_FILES
 from wash_sync.config import Settings
-from wash_sync.engine import Engine, EngineError, plan_summary
+from wash_sync.engine import Engine, EngineError, IndexNotReady, is_warehouse_workbook, plan_summary
 from wash_sync.planner import PreviewInput
 
 from .jobs import JobManager
 
 MAX_UPLOAD_BYTES = 400 * 1024 * 1024
+MAX_WAREHOUSE_BYTES = 1024 * 1024 * 1024  # the real ~627k-row warehouse is ~70 MB
 COOKIE_NAME = "wash_sync_session"
 ALLOWED_UPLOAD_EXT = (".xlsx", ".xlsm", ".xls", ".csv")
 AUDIT_DOWNLOADS = {f"{name}.csv" for name in AUDIT_FILES} | {"sync_summary.json", "report.html"}
@@ -123,6 +125,12 @@ def create_app(state_dir: str, static_dir: Path | None = None, token: str | None
 
     auth = [Depends(require_token)]
 
+    def _prepare_index(exc: IndexNotReady) -> None:
+        """Start preparing the current version's index in the background unless that is already happening."""
+        if exc.progress is None and not jobs.active("index") and not jobs.active_write():
+            jobs.start("index", lambda j: engine.index(progress=lambda f: jobs.progress(j)(
+                "index", f, "Preparing the warehouse for search")).close())
+
     @app.middleware("http")
     async def security_headers(request: Request, call_next):  # type: ignore[no-untyped-def]
         response: Response = await call_next(request)
@@ -147,6 +155,14 @@ def create_app(state_dir: str, static_dir: Path | None = None, token: str | None
         data = engine.status()
         active = jobs.active_write()
         data["active_job"] = active.to_dict() if active else None
+        data["index"] = None
+        if data["current_version"]:
+            try:
+                engine.index(build=False).close()
+                data["index"] = {"ready": True, "progress": 1.0}
+            except IndexNotReady as exc:
+                _prepare_index(exc)
+                data["index"] = {"ready": False, "progress": exc.progress}
         data["state_dir"] = settings.state_dir
         return data
 
@@ -194,6 +210,55 @@ def create_app(state_dir: str, static_dir: Path | None = None, token: str | None
             raise fail(exc, 409) from exc
         return job.to_dict()
 
+    @app.post("/api/v1/warehouse/load", dependencies=auth)
+    async def load_warehouse(request: Request, file_name: str = Query(min_length=1, max_length=255),
+                             reason: str | None = Query(default=None, max_length=2000),
+                             who: str = Depends(actor)) -> dict[str, Any]:
+        """Receive the current warehouse workbook (raw request body) and make it the current version.
+
+        The body is streamed straight into the private state directory — no temporary copy
+        elsewhere — and checked at once (is it the warehouse? already current? an older version?)
+        before verification, copying and indexing run as a background job.
+        """
+        name = os.path.basename(file_name)
+        if not name.lower().endswith((".xlsx", ".xlsm")):
+            raise HTTPException(400, "The warehouse must be an .xlsx workbook")
+        if jobs.active_write():
+            raise HTTPException(409, "Another write operation is already running")
+        target = engine.new_upload_path(name)
+        folder = os.path.dirname(target)
+        digest, size = hashlib.sha256(), 0
+        try:
+            with open(target, "wb") as out:
+                async for chunk in request.stream():
+                    size += len(chunk)
+                    if size > MAX_WAREHOUSE_BYTES:
+                        raise HTTPException(413, "The file is larger than the 1 GB warehouse limit")
+                    digest.update(chunk)
+                    out.write(chunk)
+            if size == 0:
+                raise HTTPException(400, "The file is empty")
+            sha = digest.hexdigest()
+            engine.check_load(target, name, sha)
+        except HTTPException:
+            shutil.rmtree(folder, ignore_errors=True)
+            raise
+        except EngineError as exc:
+            shutil.rmtree(folder, ignore_errors=True)
+            raise fail(exc, 400) from exc
+
+        def run(job: Any) -> dict[str, Any]:
+            try:
+                return engine.load_warehouse(target, who, reason, name, sha, progress=jobs.progress(job))
+            finally:
+                shutil.rmtree(folder, ignore_errors=True)
+
+        try:
+            return jobs.start("load", run).to_dict()
+        except RuntimeError as exc:
+            shutil.rmtree(folder, ignore_errors=True)
+            raise fail(exc, 409) from exc
+
     # ---------------------------------------------------------------- uploads & inspect
     @app.post("/api/v1/uploads", dependencies=auth)
     async def upload(file: UploadFile = File(...)) -> dict[str, Any]:
@@ -217,6 +282,9 @@ def create_app(state_dir: str, static_dir: Path | None = None, token: str | None
             det = detect_source(target).to_dict()
         except Exception as exc:  # noqa: BLE001
             det = {"source": None, "reason": f"Could not read file: {exc}"}
+        if not det.get("source") and name.lower().endswith((".xlsx", ".xlsm")) and is_warehouse_workbook(target):
+            det["reason"] = ("This is a WASH warehouse workbook, not a source export. To make it the current "
+                             "warehouse, load it in step 1 (Current warehouse).")
         uploads[upload_id] = {"path": target, "file_name": name, "size": size, "sha256": digest.hexdigest()}
         return {"upload_id": upload_id, "file_name": name, "size": size, "sha256": digest.hexdigest(), "detection": det}
 
@@ -321,13 +389,8 @@ def create_app(state_dir: str, static_dir: Path | None = None, token: str | None
     @app.post("/api/v1/plans/{plan_id}/apply", dependencies=auth)
     def apply(plan_id: str, body: ApplyBody, who: str = Depends(actor)) -> dict[str, Any]:
         def run(job: Any) -> dict[str, Any]:
-            result = engine.apply(plan_id, who, authorize=body.authorize, defer_unresolved=not body.require_all_decided,
-                                  progress=jobs.progress(job), cancelled=job.cancel_event.is_set)
-            if result.get("new_version") is not None:
-                idx = engine.index(result["new_version"], progress=lambda f: jobs.progress(job)(
-                    "index", f, "Indexing the new version for the explorer"))
-                idx.close()
-            return result
+            return engine.apply(plan_id, who, authorize=body.authorize, defer_unresolved=not body.require_all_decided,
+                                progress=jobs.progress(job), cancelled=job.cancel_event.is_set)
 
         try:
             return jobs.start("apply", run).to_dict()
@@ -385,8 +448,13 @@ def create_app(state_dir: str, static_dir: Path | None = None, token: str | None
 
     # ---------------------------------------------------------------- warehouse explorer & quality
     def _index():  # type: ignore[no-untyped-def]
+        """Index of the current version for read endpoints. Never builds inline: while it is missing
+        or being built the answer is 503 (with progress), and a background job prepares it."""
         try:
-            return engine.index()
+            return engine.index(build=False)
+        except IndexNotReady as exc:
+            _prepare_index(exc)
+            raise HTTPException(503, str(exc), headers={"Retry-After": "3"}) from exc
         except EngineError as exc:
             raise HTTPException(409, str(exc)) from exc
 

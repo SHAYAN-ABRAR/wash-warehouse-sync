@@ -82,6 +82,26 @@ def init(warehouse: str = typer.Option(..., "--warehouse", "-w", help="Verified 
         console.print(f"  [yellow]{c['status']}[/] {c['name']}: {c['detail']}")
 
 
+@app.command("load-warehouse")
+def load_warehouse(file: str = typer.Argument(..., help="Warehouse .xlsx to make the current version"),
+                   reason: str = typer.Option("", "--reason", "-r", help="Why this file becomes current (kept in history)"),
+                   state_dir: str | None = StateOpt) -> None:
+    """Make a warehouse workbook current: the baseline if none is registered, otherwise the next version
+    (for example after edits made outside this tool). Earlier versions stay available for rollback."""
+    eng = _engine(state_dir)
+    try:
+        with _progress() as update:
+            record = eng.load_warehouse(file, actor=_actor(), reason=reason, progress=update)
+    except EngineError as exc:
+        _fail(exc)
+    if record.get("unchanged"):
+        console.print(f"[yellow]Nothing to do:[/] {os.path.basename(file)} already is the current version "
+                      f"(v{record['version']:03d}).")
+        return
+    label = "Baseline registered" if record["kind"] == "BASELINE" else "Warehouse loaded"
+    console.print(f"[green]{label}[/] as {record['file']} — {record['rows']:,} rows × {record['columns']} columns")
+
+
 @app.command()
 def inspect(files: list[str] = typer.Argument(..., help="Source exports (.xlsx, .xls, .csv)"),
             source: str | None = typer.Option(None, help="GPANI | WPMS | AQUAWATCH | BORELOG (default: auto)"),

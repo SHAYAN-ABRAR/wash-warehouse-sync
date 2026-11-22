@@ -13,11 +13,13 @@ from .adapters.base import detect_source
 from .adapters.tabular import estimate_rows
 from .apply import ApplyError, apply_plan, load_plan, save_plan
 from .config import Settings
-from .index import WarehouseIndex, file_sha256
+from .index import WarehouseIndex, build_progress, file_sha256
 from .plan import DecisionRecord, Plan
 from .planner import Planner, PreviewInput
 from .records import ChangeClass
+from .schema import CORE_COLUMNS
 from .state import StateStore, atomic_write_json, new_id, now_iso
+from .xlsx.reader import iter_values
 from .xlsx.verify import verify_workbook
 
 ProgressFn = Callable[[str, float, str], None]
@@ -25,6 +27,34 @@ ProgressFn = Callable[[str, float, str], None]
 
 class EngineError(RuntimeError):
     pass
+
+
+class IndexNotReady(EngineError):
+    """The current version's lookup index is missing or still being built."""
+
+    def __init__(self, version: int, progress: float | None) -> None:
+        pct = f" ({round(progress * 100)}%)" if progress is not None else ""
+        super().__init__(f"Preparing warehouse v{version:03d} for search{pct}. This takes a few minutes for a large "
+                         "warehouse; the page updates automatically.")
+        self.version = version
+        self.progress = progress
+
+
+def warehouse_headers(path: str) -> list[str] | None:
+    """Header row of a workbook's first worksheet; None when the file is not a readable .xlsx workbook."""
+    try:
+        first = next(iter_values(path), None)
+    except Exception:  # noqa: BLE001 - not a zip / not a workbook
+        return None
+    if first is None or first[0] != 1:
+        return []
+    return [str(v) for _, v in sorted(first[1].items())]
+
+
+def is_warehouse_workbook(path: str) -> bool:
+    """True for a workbook whose header has every core warehouse column (``candidate_id``, admin names, GPS…)."""
+    headers = warehouse_headers(path)
+    return bool(headers) and all(c in headers for c in CORE_COLUMNS)
 
 
 class Engine:
@@ -39,25 +69,89 @@ class Engine:
              progress: ProgressFn | None = None) -> dict[str, Any]:
         """Register an existing verified workbook as the immutable baseline (v000)."""
         if self.store.versions() and not force:
-            raise EngineError("A baseline is already registered. Use `history` to inspect versions.")
+            raise EngineError("A baseline is already registered. To make a newer warehouse file current, use "
+                              "`wash-sync load-warehouse FILE` (or New Sync → Current warehouse).")
         if not os.path.isfile(warehouse_path):
             raise EngineError(f"Warehouse file not found: {warehouse_path}")
+        return self._register(warehouse_path, os.path.basename(warehouse_path), actor, None, force, progress)
+
+    def check_load(self, path: str, file_name: str | None = None, sha256: str | None = None) -> dict[str, Any] | None:
+        """Fast checks before a warehouse file is loaded (header row and checksum only).
+
+        Returns the current version when the file already *is* the current version, so there is
+        nothing to do. Raises EngineError for files that must not be loaded: unreadable files,
+        workbooks that are not the WASH warehouse (for example a source export chosen by mistake)
+        and copies of an earlier version, which belong to rollback instead.
+        """
+        name = file_name or os.path.basename(path)
+        if not os.path.isfile(path):
+            raise EngineError(f"Warehouse file not found: {path}")
+        headers = warehouse_headers(path)
+        if headers is None:
+            raise EngineError(f"{name} could not be read as an Excel .xlsx workbook")
+        missing = [c for c in CORE_COLUMNS if c not in headers]
+        if missing:
+            try:
+                det = detect_source(path)
+            except Exception:  # noqa: BLE001
+                det = None
+            kind = {"AQUAWATCH": "an AquaWatch", "GPANI": "a GPANI", "WPMS": "a WPMS", "BORELOG": "a bore-log"}
+            hint = (f" It looks like {kind.get(det.source, 'a ' + det.source)} source export — add it under "
+                    "“Files to sync” instead." if det is not None and det.source else "")
+            shown = ", ".join(missing[:4]) + (", …" if len(missing) > 4 else "")
+            raise EngineError(f"{name} is not the WASH warehouse: it has no {shown} column.{hint}")
+        sha = sha256 or file_sha256(path)
+        current = self.store.current_version()
+        if current is not None and current["sha256"] == sha:
+            return current
+        earlier = next((v for v in self.store.versions() if v["sha256"] == sha), None)
+        if earlier is not None:
+            label = f"v{earlier['version']:03d}"
+            raise EngineError(f"{name} is identical to {label}, an earlier version. To use it again, open Sync History "
+                              f"and choose “Make current” on {label}.")
+        return None
+
+    def load_warehouse(self, path: str, actor: str = "local-user", reason: str | None = None,
+                       file_name: str | None = None, sha256: str | None = None,
+                       progress: ProgressFn | None = None) -> dict[str, Any]:
+        """Make a warehouse workbook the current version.
+
+        Without a registered warehouse the file becomes the baseline (v000). Otherwise — typically
+        the warehouse after edits made outside this tool — it is verified and recorded as the next
+        immutable version (kind ``LOADED``); every earlier version stays available for rollback.
+        A file that already is the current version changes nothing (``unchanged`` is True).
+        """
+        name = file_name or os.path.basename(path)
+        current = self.check_load(path, name, sha256)
+        if current is not None:
+            return {**current, "unchanged": True}
+        return self._register(path, name, actor, (reason or "").strip() or None, False, progress)
+
+    def _register(self, warehouse_path: str, name: str, actor: str, reason: str | None, force: bool,
+                  progress: ProgressFn | None) -> dict[str, Any]:
+        """Verify, copy and index a workbook, then make it the current version.
+
+        The version becomes current only after its lookup index is complete, so every page that
+        reads the current version sees either the previous version or the fully prepared new one.
+        """
 
         def p(phase: str, f: float, msg: str) -> None:
             if progress:
                 progress(phase, f, msg)
 
-        p("verify", 0.0, "Verifying baseline workbook")
-        report = verify_workbook(warehouse_path, progress=lambda f: p("verify", f, "Verifying baseline workbook"))
+        p("verify", 0.0, f"Verifying {name}")
+        report = verify_workbook(warehouse_path, progress=lambda f: p("verify", f, f"Verifying {name}"), external=True)
         if not report.ok and not force:
             failed = "; ".join(f"{c.name}: {c.detail}" for c in report.checks if c.status == "FAIL")
-            raise EngineError(f"Baseline failed verification: {failed}")
+            raise EngineError(f"{name} failed verification: {failed}")
         with self.store.lock("init"):
+            previous = self.store.current_version()
             number = 0 if not self.store.versions() else self.store.next_version_number()
-            name = self.store.version_file_name(number)
-            target = self.store.p("versions", name)
+            kind = "BASELINE" if number == 0 else "LOADED"
+            file_name = self.store.version_file_name(number)
+            target = self.store.p("versions", file_name)
             tmp = target + ".partial"
-            p("copy", 0.0, f"Copying baseline to private state as {name}")
+            p("copy", 0.0, f"Copying into private state as {file_name}")
             shutil.copyfile(warehouse_path, tmp)
             sha_src, sha_copy = file_sha256(warehouse_path), file_sha256(tmp)
             if sha_src != sha_copy:
@@ -65,23 +159,31 @@ class Engine:
                 raise EngineError("Copy verification failed (SHA-256 mismatch)")
             os.replace(tmp, target)
             os.chmod(target, 0o444)
+            p("index", 0.0, "Preparing the warehouse for search")
+            try:
+                WarehouseIndex.open_or_build(target, self.store.p("index"), sha_copy,
+                                             progress=lambda f: p("index", f, "Preparing the warehouse for search")).close()
+            except BaseException:
+                os.chmod(target, 0o644)
+                os.remove(target)  # never leave an unrecorded version file behind
+                raise
             record = {
-                "version": number, "file": name, "sha256": sha_copy, "size": os.path.getsize(target),
-                "created_at": now_iso(), "previous_version": None, "kind": "BASELINE",
-                "imported_from": os.path.basename(warehouse_path), "schema_version": SCHEMA_VERSION,
+                "version": number, "file": file_name, "sha256": sha_copy, "size": os.path.getsize(target),
+                "created_at": now_iso(), "previous_version": previous["version"] if previous else None, "kind": kind,
+                "imported_from": name, "reason": reason, "schema_version": SCHEMA_VERSION,
                 "engine_version": __version__, "rows": report.stats.get("data_rows"),
                 "columns": report.stats.get("max_column"), "sources": [], "counts": {},
                 "validation": {"ok": report.ok, "checks": [c.__dict__ for c in report.checks]},
                 "applied_by": actor,
             }
             self.store.record_version(record)
-            self.store.history_append({"event": "INIT", "version": number, "by": actor,
-                                       "imported_from": os.path.basename(warehouse_path)})
-        p("index", 0.0, "Building lookup index")
-        idx = WarehouseIndex.open_or_build(target, self.store.p("index"), sha_copy,
-                                           progress=lambda f: p("index", f, "Building lookup index"))
-        idx.close()
-        p("done", 1.0, "Baseline registered")
+            if kind == "BASELINE":
+                self.store.history_append({"event": "INIT", "version": number, "by": actor, "imported_from": name})
+            else:
+                self.store.history_append({"event": "LOAD_WAREHOUSE", "version": number,
+                                           "previous_version": record["previous_version"], "by": actor,
+                                           "imported_from": name, "reason": reason})
+        p("done", 1.0, "Baseline registered" if kind == "BASELINE" else f"{name} is now the current warehouse ({file_name})")
         return record
 
     # ------------------------------------------------------------------ queries
@@ -91,8 +193,16 @@ class Engine:
             raise EngineError("No warehouse registered. Run `wash-sync init --warehouse <file.xlsx>` first.")
         return current
 
-    def index(self, version: int | None = None, progress: Callable[[float], None] | None = None) -> WarehouseIndex:
+    def index(self, version: int | None = None, progress: Callable[[float], None] | None = None,
+              build: bool = True) -> WarehouseIndex:
+        """Lookup index of a version (default: current). With ``build=False`` it never builds: a missing
+        or unfinished index raises IndexNotReady (with the progress of a build running in this process)."""
         record = self.store.version(version) if version is not None else self.require_current()
+        if not build:
+            index = WarehouseIndex.try_open(self.store.p("index"), record["sha256"])
+            if index is None:
+                raise IndexNotReady(record["version"], build_progress(self.store.p("index"), record["sha256"]))
+            return index
         return WarehouseIndex.open_or_build(self.store.version_path(record), self.store.p("index"), record["sha256"],
                                             progress=progress)
 
@@ -341,4 +451,4 @@ def plan_summary(plan: Plan) -> dict[str, Any]:
             "new_columns": [c.name for c in plan.new_columns], "approval": plan.approval.model_dump() if plan.approval else None}
 
 
-__all__ = ["Engine", "EngineError", "PreviewInput", "plan_summary", "ChangeClass"]
+__all__ = ["Engine", "EngineError", "IndexNotReady", "PreviewInput", "plan_summary", "ChangeClass", "is_warehouse_workbook"]

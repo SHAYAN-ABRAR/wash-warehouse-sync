@@ -37,7 +37,7 @@ class Job:
 class JobManager:
     """Runs one job at a time per kind group; write operations are serialized."""
 
-    WRITE_KINDS = {"init", "apply", "rollback"}
+    WRITE_KINDS = {"init", "load", "apply", "rollback"}
 
     def __init__(self) -> None:
         self.jobs: dict[str, Job] = {}
@@ -45,6 +45,9 @@ class JobManager:
 
     def active_write(self) -> Job | None:
         return next((j for j in self.jobs.values() if j.kind in self.WRITE_KINDS and j.status in ("queued", "running")), None)
+
+    def active(self, kind: str) -> Job | None:
+        return next((j for j in self.jobs.values() if j.kind == kind and j.status in ("queued", "running")), None)
 
     def start(self, kind: str, fn: Callable[[Job], Any]) -> Job:
         with self._lock:

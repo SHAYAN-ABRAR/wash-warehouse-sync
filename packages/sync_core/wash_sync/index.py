@@ -13,6 +13,7 @@ import json
 import os
 import re
 import sqlite3
+import threading
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -34,6 +35,39 @@ from .xlsx.reader import (
 INDEX_FORMAT = 6
 SRC_BITS = {"GPANI": 1, "WPMS": 2, "AQUAWATCH": 4, "BORELOG": 8}
 _COLS_RE = re.compile(rb'<col\b([^>]*?)/>')
+
+
+# One build per index at a time in this process: concurrent callers (API requests, jobs)
+# wait for the running build and then reuse its result instead of building again.
+_BUILD_GUARD = threading.Lock()
+_BUILD_LOCKS: dict[str, threading.Lock] = {}
+_BUILD_PROGRESS: dict[str, float] = {}
+
+
+def index_db_path(cache_dir: str, sha256: str) -> str:
+    return os.path.join(cache_dir, f"{sha256[:24]}.v{INDEX_FORMAT}.sqlite")
+
+
+def build_progress(cache_dir: str, sha256: str) -> float | None:
+    """Progress (0..1) of an index build running in this process, or None."""
+    with _BUILD_GUARD:
+        return _BUILD_PROGRESS.get(index_db_path(cache_dir, sha256))
+
+
+def _remove_abandoned_builds(cache_dir: str, db_name: str) -> None:
+    """Delete temporary build files of this index left behind by processes that no longer run."""
+    from .state import _pid_alive  # noqa: PLC0415 - avoid an import cycle
+
+    for name in os.listdir(cache_dir):
+        if not (name.startswith(db_name + ".") and name.endswith(".building")):
+            continue
+        pid = name[len(db_name) + 1: -len(".building")]
+        if pid.isdigit() and int(pid) != os.getpid() and _pid_alive(int(pid)):
+            continue
+        try:
+            os.remove(os.path.join(cache_dir, name))
+        except OSError:
+            pass
 
 
 def file_sha256(path: str, chunk: int = 4 * 1024 * 1024) -> str:
@@ -116,7 +150,7 @@ class WarehouseIndex:
               progress: Callable[[float], None] | None = None,
               cancelled: Callable[[], bool] | None = None) -> WarehouseIndex:
         sha256 = sha256 or file_sha256(workbook_path)
-        tmp = db_path + ".building"
+        tmp = f"{db_path}.{os.getpid()}.building"  # per process, so concurrent processes never clobber each other
         if os.path.exists(tmp):
             os.remove(tmp)
         conn = sqlite3.connect(tmp)
@@ -158,7 +192,9 @@ class WarehouseIndex:
         batch: list[tuple[Any, ...]] = []
         insert_sql = "INSERT INTO rows VALUES (" + ",".join("?" * 28) + ")"
         count = 0
+        last_row = 0
         for row in stream.rows():
+            last_row = row.num
             cells = row.cells(shared)
             if row.num == 1:
                 for c in cells:
@@ -192,9 +228,7 @@ class WarehouseIndex:
                     st["num"] += 1
                     v = float(c.value)
                     st["min"] = v if st["min"] is None or v < st["min"] else st["min"]
-        last_row = 0
                     st["max"] = v if st["max"] is None or v > st["max"] else st["max"]
-            last_row = row.num
                 else:
                     st["str"] += 1
                     if isinstance(c.value, str) and len(c.value) > st["maxlen"]:
@@ -294,22 +328,49 @@ class WarehouseIndex:
         return cls(db_path)
 
     @classmethod
+    def try_open(cls, cache_dir: str, sha256: str) -> WarehouseIndex | None:
+        """Open the complete index for a workbook, or return None if it is missing or unusable (never builds)."""
+        db_path = index_db_path(cache_dir, sha256)
+        if not os.path.exists(db_path):
+            return None
+        try:
+            index = cls(db_path)
+        except (RuntimeError, sqlite3.DatabaseError, KeyError):
+            return None
+        if index.sha256 != sha256:
+            index.close()
+            return None
+        return index
+
+    @classmethod
     def open_or_build(cls, workbook_path: str, cache_dir: str, sha256: str | None = None,
                       progress: Callable[[float], None] | None = None,
                       cancelled: Callable[[], bool] | None = None) -> WarehouseIndex:
         os.makedirs(cache_dir, exist_ok=True)
         sha256 = sha256 or file_sha256(workbook_path)
-        db_path = os.path.join(cache_dir, f"{sha256[:24]}.v{INDEX_FORMAT}.sqlite")
-        if os.path.exists(db_path):
+        db_path = index_db_path(cache_dir, sha256)
+        with _BUILD_GUARD:
+            lock = _BUILD_LOCKS.setdefault(db_path, threading.Lock())
+        with lock:
+            existing = cls.try_open(cache_dir, sha256)
+            if existing is not None:
+                return existing
+            if os.path.exists(db_path):
+                os.remove(db_path)
+            _remove_abandoned_builds(cache_dir, os.path.basename(db_path))
+
+            def track(fraction: float) -> None:
+                with _BUILD_GUARD:
+                    _BUILD_PROGRESS[db_path] = fraction
+                if progress:
+                    progress(fraction)
+
+            track(0.0)
             try:
-                index = cls(db_path)
-                if index.sha256 == sha256:
-                    return index
-                index.close()
-            except (RuntimeError, sqlite3.DatabaseError, KeyError):
-                pass
-            os.remove(db_path)
-        index = cls.build(workbook_path, db_path, sha256, progress, cancelled)
+                index = cls.build(workbook_path, db_path, sha256, track, cancelled)
+            finally:
+                with _BUILD_GUARD:
+                    _BUILD_PROGRESS.pop(db_path, None)
         for name in os.listdir(cache_dir):  # drop caches of older index formats for this workbook
             if name.startswith(sha256[:24]) and name.endswith(".sqlite") and name != os.path.basename(db_path):
                 try:

@@ -2,14 +2,25 @@
 
 from __future__ import annotations
 
+import copy
 import os
+import random
+import re
+import zipfile
 from typing import Any
 
 import pytest
 from wash_sync.config import Settings
 from wash_sync.engine import Engine
 from wash_sync.planner import PreviewInput
-from wash_sync.synthetic import AQUA_SURVEY_HEADERS, build_world, write_table, write_world_warehouse
+from wash_sync.synthetic import (
+    AQUA_SURVEY_HEADERS,
+    build_world,
+    make_aqua,
+    random_geo,
+    write_table,
+    write_world_warehouse,
+)
 from wash_sync.xlsx.reader import iter_values
 
 
@@ -70,3 +81,43 @@ def current_path(eng: Engine) -> str:
 
 def aqua_rows(world) -> list[dict[str, Any]]:
     return [r for r in world.rows if r.get("aqua_gwc_id")]
+
+
+def edited_warehouse(world, path: os.PathLike[str] | str) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    """The warehouse as edited outside this tool: one AquaWatch facility added and one value corrected."""
+    edited = copy.deepcopy(world)
+    rng = random.Random(99)
+    added = make_aqua(rng, random_geo(rng, edited.admin_tree), 9001, ["2025"])
+    corrected = next(r for r in edited.rows if isinstance(r.get("aqua_2025_arsenic_raw"), float))
+    corrected["aqua_2025_arsenic_raw"] = 0.077
+    edited.rows.append(added)
+    write_world_warehouse(edited, str(path))
+    return str(path), added, corrected
+
+
+def to_shared_strings(src: str, dst: str) -> None:
+    """Re-store a workbook the way Excel saves text: every inline string becomes a shared string."""
+    with zipfile.ZipFile(src) as zin:
+        members = {name: zin.read(name) for name in zin.namelist()}
+    sheet = next(n for n in members if n.startswith("xl/worksheets/sheet"))
+    strings: dict[bytes, int] = {}
+
+    def shared(m: re.Match[bytes]) -> bytes:
+        idx = strings.setdefault(m.group(2), len(strings))
+        return b"<c" + m.group(1).replace(b' t="inlineStr"', b' t="s"') + b"><v>%d</v></c>" % idx
+
+    members[sheet] = re.sub(rb'<c\b([^>]*\bt="inlineStr"[^>]*)><is><t(?:\s[^>]*)?>(.*?)</t></is></c>', shared,
+                            members[sheet], flags=re.S)
+    members["xl/sharedStrings.xml"] = (
+        b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<sst xmlns="http://schemas.openxmlformats.org/'
+        b'spreadsheetml/2006/main" count="%d" uniqueCount="%d">' % (len(strings), len(strings))
+        + b"".join(b'<si><t xml:space="preserve">' + text + b"</t></si>" for text in strings) + b"</sst>")
+    members["[Content_Types].xml"] = members["[Content_Types].xml"].replace(
+        b"</Types>", b'<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-'
+                     b'officedocument.spreadsheetml.sharedStrings+xml"/></Types>')
+    members["xl/_rels/workbook.xml.rels"] = members["xl/_rels/workbook.xml.rels"].replace(
+        b"</Relationships>", b'<Relationship Id="rIdSharedStrings" Type="http://schemas.openxmlformats.org/'
+                             b'officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>')
+    with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zout:
+        for name, data in members.items():
+            zout.writestr(name, data)
